@@ -104,7 +104,7 @@ describe('tasks v2 create', () => {
 		scheduledTitleGenerations.length = 0
 	})
 
-	async function setupActor(enabled = true, projectRepository = repository) {
+	async function setupActor(enabled?: boolean, projectRepository = repository) {
 		const organizationId = uuidv7()
 		const userId = `user-${uuidv7()}`
 		const hostId = `host-${uuidv7()}`
@@ -112,9 +112,10 @@ describe('tasks v2 create', () => {
 		await db
 			.insert(organizations)
 			.values({ id: organizationId, name: 'V2 task test', workos_organization_id: `workos-${organizationId}` })
-		await db
-			.insert(userSettings)
-			.values({ organization_id: organizationId, user_id: userId, projects_v2_enabled: enabled })
+		if (enabled !== undefined)
+			await db
+				.insert(userSettings)
+				.values({ organization_id: organizationId, user_id: userId, projects_v2_enabled: enabled })
 		await db
 			.insert(onlineHosts)
 			.values({ organization_id: organizationId, user_id: userId, host_id: hostId, status: 'online' })
@@ -188,7 +189,7 @@ describe('tasks v2 create', () => {
 		permissionsMode: 'default' as const,
 	}
 
-	test('atomically creates workspace, task, session, and repository status rows', async () => {
+	test('atomically creates workspace, task, session, and repository status rows without settings', async () => {
 		const actor = await setupActor()
 		const taskId = uuidv7()
 		const workspaceId = uuidv7()
@@ -209,6 +210,9 @@ describe('tasks v2 create', () => {
 		expect(result.result).toBe('created')
 		expect(result.taskId).toBe(taskId)
 		expect(result.workspaceId).toBe(workspaceId)
+		expect(
+			await db.select().from(userSettings).where(eq(userSettings.organization_id, actor.organizationId)),
+		).toEqual([])
 
 		const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId))
 		expect(task!.project_id).toBe(actor.projectId)
@@ -630,23 +634,24 @@ describe('tasks v2 create', () => {
 		expect(statuses).toEqual([])
 	})
 
-	test('rejects when projects v2 is disabled', async () => {
+	test('creates tasks for legacy rollout-disabled users', async () => {
 		const actor = await setupActor(false)
-		await expect(
-			call(
-				createTaskV2,
-				{
-					taskId: uuidv7(),
-					workspaceId: uuidv7(),
-					projectId: actor.projectId,
-					name: 'Should fail',
-					slug: 'should-fail',
-					repositories: [repository],
-					firstSession: { ...firstSession, hostId: actor.hostId },
-				},
-				{ context: actor.context },
-			),
-		).rejects.toThrow(ORPCError)
+		const result = await call(
+			createTaskV2,
+			{
+				taskId: uuidv7(),
+				workspaceId: uuidv7(),
+				projectId: actor.projectId,
+				name: 'Released task',
+				slug: 'released-task',
+				repositories: [repository],
+				firstSession: { ...firstSession, hostId: actor.hostId },
+			},
+			{ context: actor.context },
+		)
+		expect(result.result).toBe('created')
+		expect(await db.select().from(tasks).where(eq(tasks.id, result.taskId))).toHaveLength(1)
+		expect(await db.select().from(workspaces).where(eq(workspaces.id, result.workspaceId))).toHaveLength(1)
 	})
 
 	test('accepts branch publishing, copy globs, and setup commands from the project recipe', async () => {

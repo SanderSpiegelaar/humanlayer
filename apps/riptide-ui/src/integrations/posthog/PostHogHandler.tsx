@@ -1,20 +1,13 @@
 import { useAuth } from '@workos-inc/authkit-react'
-import { useState } from 'react'
 
 import { useMountEffect } from '@/hooks/useMountEffect'
 import {
 	identifyPostHogUser,
 	initPostHog,
 	isPostHogEnabled,
-	onProjectsV2Flag,
 	resetPostHogIdentity,
 } from '@/integrations/posthog/posthog'
-import {
-	enableProjectsV2ForScope,
-	subscribeToProjectsV2Assignment,
-} from '@/integrations/posthog/projects-v2-assignment'
 import { subscribeToWorkflowSelectorAssignment } from '@/integrations/posthog/workflow-selector-assignment'
-import { useRiptideApi } from '@/orpc/client'
 
 /**
  * Initializes PostHog once and identifies the authenticated WorkOS user.
@@ -30,15 +23,9 @@ export function PostHogHandler() {
 }
 
 function PostHogIdentifiedSession({ userId }: { userId: string }) {
-	const { organizationId } = useAuth()
-	// Children mount their effects before this one runs, so the Projects V2 subscription waits
-	// until the WorkOS identity is installed rather than reading flags for an anonymous person.
-	const [identified, setIdentified] = useState(false)
-
 	useMountEffect(() => {
 		initPostHog()
 		identifyPostHogUser(userId)
-		setIdentified(true)
 
 		const stopWorkflowSelector = subscribeToWorkflowSelectorAssignment(userId)
 		return () => {
@@ -47,25 +34,6 @@ function PostHogIdentifiedSession({ userId }: { userId: string }) {
 	})
 
 	useMountEffect(() => () => resetPostHogIdentity())
-
-	if (!identified || !organizationId) return null
-
-	// Keyed like SettingsSyncHandler: the group is saved per organization, and switching
-	// organizations does not remount this identified session.
-	const scope = `${userId}:${organizationId}`
-	return <ProjectsV2AssignmentSync key={scope} userId={userId} scope={scope} />
-}
-
-function ProjectsV2AssignmentSync({ userId, scope }: { userId: string; scope: string }) {
-	const { client } = useRiptideApi()
-
-	useMountEffect(() =>
-		subscribeToProjectsV2Assignment({
-			subscribe: (callback) => onProjectsV2Flag(userId, callback),
-			save: (variant) => client.auth.user.settings.update({ projectsV2AssignedVariant: variant }),
-			enable: () => enableProjectsV2ForScope(scope),
-		}),
-	)
 
 	return null
 }

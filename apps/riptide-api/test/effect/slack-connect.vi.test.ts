@@ -147,6 +147,17 @@ describe('Slack connect service', () => {
 			.where(eq(organizationSettings.organization_id, organizationId))
 			.limit(1)
 		expect(settings?.slack_integration_enabled).toBe(true)
+		expect(settings).toMatchObject({
+			experimental_subagents_enabled: true,
+			haiku_research_subagents_enabled: true,
+			multiplayer_prompting_enabled: true,
+			jira_integration_enabled: false,
+			linear_integration_enabled: false,
+			github_integration_enabled: false,
+			commit_tracking_enabled: false,
+			pr_tracking_enabled: false,
+			advanced_metrics_visible_to_all_members: false,
+		})
 		const [consumedState] = await db.select().from(slackIntegrationInstallStates).limit(1)
 		expect(consumedState?.consumed_at).toBeTruthy()
 	})

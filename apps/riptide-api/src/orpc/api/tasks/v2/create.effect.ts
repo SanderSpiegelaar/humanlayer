@@ -86,7 +86,6 @@ export const createTaskV2Procedure = effectOrpcBaseOrganizationRequired.tasks.v2
 		importedTicket,
 	}).pipe(
 		Effect.catchTags({
-			ProjectsV2Disabled: () => Effect.fail(errors.FORBIDDEN()),
 			ProjectNotFound: (error) => Effect.fail(errors.PROJECT_NOT_FOUND({ data: { projectId: error.projectId } })),
 			ProjectLocationInvalid: (error) =>
 				Effect.fail(errors.LOCATION_MISSING({ data: { message: error.message } })),

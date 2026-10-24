@@ -23,7 +23,6 @@ export const createProjectV2Procedure = effectOrpcBaseOrganizationRequired.proje
 		project: input,
 	}).pipe(
 		Effect.catchTags({
-			ProjectsV2Disabled: () => Effect.fail(errors.FORBIDDEN()),
 			ProjectLocationInvalid: (error) => Effect.fail(errors.BAD_REQUEST({ data: { message: error.message } })),
 			ProjectPersistenceUnavailable: () => Effect.fail(errors.SERVICE_UNAVAILABLE()),
 			PostgresDbQueryError: () => Effect.fail(errors.SERVICE_UNAVAILABLE()),

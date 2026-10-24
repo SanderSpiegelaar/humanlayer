@@ -2,6 +2,7 @@ import { jiraIntegrations } from '@humanlayer/db/tables/jira-integrations'
 import { linearIntegrations } from '@humanlayer/db/tables/linear-integrations'
 import { organizationSettings } from '@humanlayer/db/tables/organization-settings'
 import { userSettings } from '@humanlayer/db/tables/user-settings'
+import { ORGANIZATION_FEATURE_DEFAULTS, USER_FEATURE_DEFAULTS } from '@humanlayer/db/utils/settings-defaults'
 import { eq, isNull, sql } from 'drizzle-orm'
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core'
 import { Clock, Effect } from 'effect'
@@ -13,11 +14,9 @@ import { Sentry } from '../../../../instrument'
 import { effectOrpcBaseOrganizationRequired } from '../../../effect-base'
 
 const ORG_DEFAULTS = {
-	experimental_subagents_enabled: false,
-	haiku_research_subagents_enabled: false,
+	...ORGANIZATION_FEATURE_DEFAULTS,
 	jira_integration_enabled: false,
 	linear_integration_enabled: false,
-	multiplayer_prompting_enabled: false,
 	enable_creating_publicly_shareable_links: true,
 	commit_tracking_enabled: false,
 }
@@ -83,6 +82,7 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 		// Build the set of columns to update (only those provided in input)
 		const updateSet: PgUpdateSetSource<typeof userSettings> = {
 			updated_at: BigInt(Date.now()),
+			projects_v2_enabled: USER_FEATURE_DEFAULTS.projects_v2_enabled,
 		}
 		if (input.theme !== undefined) updateSet.theme = input.theme
 		if (input.experimentalSubagentsEnabled !== undefined)
@@ -97,10 +97,6 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 			updateSet.prefer_batch_queue_delivery = input.preferBatchQueueDelivery
 		if (input.sidebarVariant !== undefined) updateSet.sidebar_variant = input.sidebarVariant
 		if (input.showTaskPhaseLabels !== undefined) updateSet.show_task_phase_labels = input.showTaskPhaseLabels
-		// Projects V2 access only turns on. `false` from older clients is accepted and ignored.
-		if (input.projectsV2Enabled === true) updateSet.projects_v2_enabled = true
-		else if (input.projectsV2AssignedVariant !== undefined)
-			updateSet.projects_v2_enabled = sql`${userSettings.projects_v2_enabled} OR ${userSettings.projects_v2_assigned_variant} = 'v2'`
 		if (input.experiments !== undefined)
 			updateSet.experiment_flags = sql`${userSettings.experiment_flags} || ${JSON.stringify(input.experiments)}::jsonb`
 		if (input.onboardingDismissedAt !== undefined)
@@ -112,7 +108,7 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 			.transaction((tx) =>
 				Effect.gen(function* () {
 					// Save the first experiment group only while none is saved, so retries and later
-					// flag values cannot replace it. A V2 group turns access on in the same write.
+					// flag values cannot replace it. Historical groups no longer control access.
 					// ON CONFLICT ... WHERE returns no row when a group already exists, which tells
 					// this call whether it made the first save.
 					let assignmentSaved = false
@@ -123,7 +119,6 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 							projects_v2_assigned_at: assignedAt,
 							updated_at: assignedAt,
 						}
-						if (assignedVariant === 'v2') assignmentSet.projects_v2_enabled = true
 						const saved = yield* tx.query(
 							tx.client
 								.insert(userSettings)
@@ -132,7 +127,7 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 									organization_id: organizationId,
 									projects_v2_assigned_variant: assignedVariant,
 									projects_v2_assigned_at: assignedAt,
-									projects_v2_enabled: assignedVariant === 'v2',
+									projects_v2_enabled: USER_FEATURE_DEFAULTS.projects_v2_enabled,
 								})
 								.onConflictDoUpdate({
 									target: [userSettings.user_id, userSettings.organization_id],
@@ -151,15 +146,19 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 								user_id: userId,
 								organization_id: organizationId,
 								theme: input.theme ?? 'catppuccin',
-								experimental_subagents_enabled: input.experimentalSubagentsEnabled ?? false,
+								experimental_subagents_enabled:
+									input.experimentalSubagentsEnabled ??
+									USER_FEATURE_DEFAULTS.experimental_subagents_enabled,
 								claude_code_effect_runtime_enabled: input.claudeCodeEffectRuntimeEnabled ?? false,
-								haiku_research_subagents_enabled: input.haikuResearchSubagentsEnabled ?? false,
+								haiku_research_subagents_enabled:
+									input.haikuResearchSubagentsEnabled ??
+									USER_FEATURE_DEFAULTS.haiku_research_subagents_enabled,
 								default_model: input.defaultModel ?? 'opus',
 								default_agent: input.defaultAgent ?? 'claude',
 								prefer_batch_queue_delivery: input.preferBatchQueueDelivery ?? true,
 								sidebar_variant: input.sidebarVariant ?? 'flat',
 								show_task_phase_labels: input.showTaskPhaseLabels ?? false,
-								projects_v2_enabled: input.projectsV2Enabled === true,
+								projects_v2_enabled: USER_FEATURE_DEFAULTS.projects_v2_enabled,
 								experiment_flags: input.experiments ?? {},
 								onboarding_dismissed_at:
 									input.onboardingDismissedAt === undefined || input.onboardingDismissedAt === null
@@ -248,7 +247,7 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 				haikuResearchSubagentsEnabled: org.haiku_research_subagents_enabled,
 				jiraIntegrationEnabled: org.jira_integration_enabled ?? false,
 				linearIntegrationEnabled: org.linear_integration_enabled ?? false,
-				multiplayerPromptingEnabled: org.multiplayer_prompting_enabled ?? false,
+				multiplayerPromptingEnabled: org.multiplayer_prompting_enabled,
 				syncVersion: 2 as const,
 				syncVisibility: 'v2' as const,
 				enableCreatingPubliclyShareableLinks: org.enable_creating_publicly_shareable_links ?? true,

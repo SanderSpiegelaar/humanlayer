@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto'
 
 import { linearIntegrations } from '@humanlayer/db/tables/linear-integrations'
+import { organizationSettings } from '@humanlayer/db/tables/organization-settings'
 import { organizations } from '@humanlayer/db/tables/organizations'
 import { call } from '@orpc/server'
+import { eq } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 
-import { LinearIssueUnavailableError } from '../../src/lib/linear-service'
+import { LinearIssueUnavailableError, LinearService } from '../../src/lib/linear-service'
 import { getOrgSettingsEffectProcedure as liveGetOrgSettingsProcedure } from '../../src/orpc/api/auth/admin/organizations-settings-get.effect'
 import { setOrgSettingsEffectProcedure as liveSetOrgSettingsProcedure } from '../../src/orpc/api/auth/admin/organizations-settings-set.effect'
 import { getUserSettingsEffectProcedure as liveGetUserSettingsProcedure } from '../../src/orpc/api/auth/user/settings-get.effect'
@@ -108,6 +110,73 @@ describe('linear-integration', async () => {
 		expect(result.enabled).toBe(false)
 		expect(result.connected).toBe(false)
 		expect(result.needsReauth).toBe(false)
+	})
+
+	test('a first Linear connection inherits unrelated defaults and reconnect preserves saved restrictions', async () => {
+		const userId = getUniqueUserId()
+		const orgId = await createTestOrg()
+		const linear = new LinearService('client-id', 'client-secret', db, 'https://api.example.test/linear/callback')
+		vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+			const url = input instanceof Request ? input.url : String(input)
+			if (url === 'https://api.linear.app/oauth/token') {
+				return Response.json({
+					access_token: 'access',
+					refresh_token: 'refresh',
+					expires_in: 3600,
+					scope: 'read,write',
+					token_type: 'Bearer',
+				})
+			}
+			if (url === 'https://api.linear.app/graphql') {
+				return Response.json({ data: { organization: { id: 'linear-org' } } })
+			}
+			throw new Error(`Unexpected provider request: ${url}`)
+		})
+		try {
+			expect(
+				await db.select().from(organizationSettings).where(eq(organizationSettings.organization_id, orgId)),
+			).toEqual([])
+			await linear.exchangeCode(orgId, userId, 'code')
+			const [settings] = await db
+				.select()
+				.from(organizationSettings)
+				.where(eq(organizationSettings.organization_id, orgId))
+			expect(settings).toMatchObject({
+				experimental_subagents_enabled: true,
+				haiku_research_subagents_enabled: true,
+				multiplayer_prompting_enabled: true,
+				linear_integration_enabled: true,
+				jira_integration_enabled: false,
+				slack_integration_enabled: false,
+				github_integration_enabled: false,
+				commit_tracking_enabled: false,
+				pr_tracking_enabled: false,
+				advanced_metrics_visible_to_all_members: false,
+			})
+			expect((await linear.getIntegrationStatus(orgId)).enabled).toBe(true)
+			await db
+				.update(organizationSettings)
+				.set({ experimental_subagents_enabled: false, multiplayer_prompting_enabled: false })
+				.where(eq(organizationSettings.organization_id, orgId))
+			await db
+				.update(linearIntegrations)
+				.set({ needs_reauth: true })
+				.where(eq(linearIntegrations.organization_id, orgId))
+			expect((await linear.getIntegrationStatus(orgId)).enabled).toBe(false)
+			await linear.exchangeCode(orgId, userId, 'reauth-code')
+			const [reconnected] = await db
+				.select()
+				.from(organizationSettings)
+				.where(eq(organizationSettings.organization_id, orgId))
+			expect(reconnected).toMatchObject({
+				experimental_subagents_enabled: false,
+				multiplayer_prompting_enabled: false,
+			})
+			await linear.disconnect(orgId)
+			expect((await linear.getIntegrationStatus(orgId)).connected).toBe(false)
+		} finally {
+			vi.unstubAllGlobals()
+		}
 	})
 
 	test.each([

@@ -93,9 +93,6 @@ describe('sessions v2 create', () => {
 			.insert(organizations)
 			.values({ id: organizationId, name: 'Session V2 test', workos_organization_id: `workos-${organizationId}` })
 		await db
-			.insert(userSettings)
-			.values({ organization_id: organizationId, user_id: userId, projects_v2_enabled: true })
-		await db
 			.insert(onlineHosts)
 			.values({ organization_id: organizationId, user_id: userId, host_id: hostId, status: 'online' })
 		await db.insert(projects).values({
@@ -178,7 +175,7 @@ describe('sessions v2 create', () => {
 		})
 	}
 
-	test('creates a second session without changing its existing persisted placement path', async () => {
+	test('creates a second session without settings or changes to its persisted placement path', async () => {
 		const actor = await setupTaskWithWorkspace()
 		const result = await call(
 			createSessionV2,
@@ -197,6 +194,9 @@ describe('sessions v2 create', () => {
 		)
 
 		expect(result.result).toBe('created')
+		expect(
+			await db.select().from(userSettings).where(eq(userSettings.organization_id, actor.organizationId)),
+		).toEqual([])
 
 		const sessionRows = await db.select().from(sessions).where(eq(sessions.task_id, actor.taskId))
 		expect(sessionRows).toHaveLength(1)

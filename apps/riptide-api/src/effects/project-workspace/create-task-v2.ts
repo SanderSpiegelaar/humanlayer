@@ -6,7 +6,6 @@ import { sessions } from '@humanlayer/db/tables/sessions'
 import { taskLaunches } from '@humanlayer/db/tables/task-launches'
 import { taskOrganizationAcl } from '@humanlayer/db/tables/task-organization-acl'
 import { tasks } from '@humanlayer/db/tables/tasks'
-import { userSettings } from '@humanlayer/db/tables/user-settings'
 import { workspaces } from '@humanlayer/db/tables/workspaces'
 import type { CreateTaskV2Input } from '@humanlayer/riptide-api-contract/api/tasks/v2/create'
 import {
@@ -22,7 +21,7 @@ import { hash } from 'ohash'
 
 import type { PreparedTicketArtifactBundle } from '../../lib/linear-ticket-artifacts'
 import { getTransactionId } from '../services/postgres/helpers'
-import { PostgresDb, type PostgresTransaction } from '../services/postgres/postgres-db.service'
+import { PostgresDb } from '../services/postgres/postgres-db.service'
 import { SessionTitleGeneration } from '../services/session-title-generation/session-title-generation.service'
 import { TaskIntentClassifier } from '../services/task-intent-classifier/task-intent-classifier.service'
 import { taskIntentLabels } from '../services/task-intent-classifier/task-intent-labels'
@@ -30,7 +29,6 @@ import {
 	ProjectLocationInvalid,
 	ProjectNotFound,
 	ProjectPersistenceUnavailable,
-	ProjectsV2Disabled,
 	UnsupportedRecipeProfile,
 } from './errors'
 import { projectReadableByActor } from './project-authorization'
@@ -60,8 +58,6 @@ export const createTaskV2 = Effect.fn('project_workspace.create_task_v2')(functi
 
 	const result = yield* postgres.transaction((transaction) =>
 		Effect.gen(function* () {
-			yield* requireProjectsV2Enabled(transaction, input.actor)
-
 			const [project] = yield* transaction.query(
 				transaction.client
 					.select()
@@ -440,20 +436,6 @@ export const createTaskV2 = Effect.fn('project_workspace.create_task_v2')(functi
 	}
 	return result
 })
-
-function requireProjectsV2Enabled(transaction: PostgresTransaction, actor: ProjectActorContext) {
-	return transaction
-		.query(
-			transaction.client
-				.select({ enabled: userSettings.projects_v2_enabled })
-				.from(userSettings)
-				.where(
-					and(eq(userSettings.organization_id, actor.organizationId), eq(userSettings.user_id, actor.userId)),
-				)
-				.limit(1),
-		)
-		.pipe(Effect.flatMap((rows) => (rows[0]?.enabled ? Effect.void : new ProjectsV2Disabled())))
-}
 
 function validateWorkspaceRepositories(
 	projectRepositories: ProjectRepositories,

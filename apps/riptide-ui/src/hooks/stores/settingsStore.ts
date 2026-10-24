@@ -5,6 +5,7 @@ import {
 	DEFAULT_CODEX_REASONING,
 } from '@humanlayer/ai/config'
 import type { ExperimentFlags } from '@humanlayer/db/tables/user-settings'
+import { ORGANIZATION_FEATURE_DEFAULTS, USER_FEATURE_DEFAULTS } from '@humanlayer/db/utils/settings-defaults'
 import type { ResolvedTaskWorkflowType } from '@humanlayer/schemas/effect/taskconfiguration'
 import type { SelectableModelProvider } from '@humanlayer/schemas/model-provider'
 import type { DiffStyle } from '@humanlayer/ui/components/diff-style-provider'
@@ -676,13 +677,13 @@ export const useSettingsStore = create<SettingsState>()(
 
 			// Server-synced settings with defaults
 			theme: 'rose-pine',
-			experimentalSubagentsEnabled: true,
-			haikuResearchSubagentsEnabled: false,
+			experimentalSubagentsEnabled: USER_FEATURE_DEFAULTS.experimental_subagents_enabled,
+			haikuResearchSubagentsEnabled: USER_FEATURE_DEFAULTS.haiku_research_subagents_enabled,
 			defaultModel: initialClaudeCodeModel,
 			defaultAgent: 'claude' as const,
 			preferBatchQueueDelivery: true,
 			showTaskPhaseLabels: false,
-			projectsV2Enabled: false,
+			projectsV2Enabled: USER_FEATURE_DEFAULTS.projects_v2_enabled,
 			onboardingDismissedAt: null,
 			firstTaskCompletedAt: null,
 			firstStructuredWorkflowCompletedAt: null,
@@ -733,17 +734,21 @@ export const useSettingsStore = create<SettingsState>()(
 			sendMessageKeybinding: 'mod+enter',
 			syncForceMode: 'auto',
 			effectiveSettings: {
-				experimentalSubagentsEnabled: true,
-				haikuResearchSubagentsEnabled: false,
+				experimentalSubagentsEnabled:
+					ORGANIZATION_FEATURE_DEFAULTS.experimental_subagents_enabled &&
+					USER_FEATURE_DEFAULTS.experimental_subagents_enabled,
+				haikuResearchSubagentsEnabled:
+					ORGANIZATION_FEATURE_DEFAULTS.haiku_research_subagents_enabled &&
+					USER_FEATURE_DEFAULTS.haiku_research_subagents_enabled,
 			},
 			orgSettings: {
-				experimentalSubagentsEnabled: true,
-				haikuResearchSubagentsEnabled: true,
+				experimentalSubagentsEnabled: ORGANIZATION_FEATURE_DEFAULTS.experimental_subagents_enabled,
+				haikuResearchSubagentsEnabled: ORGANIZATION_FEATURE_DEFAULTS.haiku_research_subagents_enabled,
 				jiraIntegrationEnabled: false,
 				linearIntegrationEnabled: false,
 				enableCreatingPubliclyShareableLinks: true,
 				commitTrackingEnabled: false,
-				multiplayerPromptingEnabled: false,
+				multiplayerPromptingEnabled: ORGANIZATION_FEATURE_DEFAULTS.multiplayer_prompting_enabled,
 			},
 
 			// Preference actions

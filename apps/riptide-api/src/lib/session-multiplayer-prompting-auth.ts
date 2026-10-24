@@ -1,6 +1,7 @@
 import { organizationSettings } from '@humanlayer/db/tables/organization-settings'
 import { sessions } from '@humanlayer/db/tables/sessions'
 import type { AclPermissionLevel } from '@humanlayer/db/tables/task-user-acl'
+import { ORGANIZATION_FEATURE_DEFAULTS } from '@humanlayer/db/utils/settings-defaults'
 import { and, eq } from 'drizzle-orm'
 import type { PgDatabase } from 'drizzle-orm/pg-core'
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js'
@@ -124,7 +125,8 @@ export async function getSessionAccessControlLevelForClassicProcedure(
 		sessionCreatedBy: row.createdBy,
 		sessionResourceOwnerUserId: row.resourceOwnerUserId,
 		sessionTaskId: row.taskId,
-		multiplayerPromptingEnabledForOrganization: row.featureEnabled ?? false,
+		multiplayerPromptingEnabledForOrganization:
+			row.featureEnabled ?? ORGANIZATION_FEATURE_DEFAULTS.multiplayer_prompting_enabled,
 		multiplayerPromptingUserIds: row.userIds,
 		multiplayerPromptingStartedAt: row.startedAt,
 		multiplayerPromptingExpiresAt: row.expiresAt,
@@ -180,7 +182,8 @@ export const getSessionPromptingAccess = Effect.fn('session_multiplayer_promptin
 			: null
 
 		const grant: MultiplayerPromptingGrant = {
-			multiplayerPromptingEnabledForOrganization: row.featureEnabled ?? false,
+			multiplayerPromptingEnabledForOrganization:
+				row.featureEnabled ?? ORGANIZATION_FEATURE_DEFAULTS.multiplayer_prompting_enabled,
 			multiplayerPromptingUserIds: row.userIds,
 			multiplayerPromptingStartedAt: row.startedAt,
 			multiplayerPromptingExpiresAt: row.expiresAt,

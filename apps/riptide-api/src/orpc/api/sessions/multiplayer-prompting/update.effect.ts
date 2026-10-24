@@ -1,6 +1,7 @@
 import { organizationSettings } from '@humanlayer/db/tables/organization-settings'
 import { sessions } from '@humanlayer/db/tables/sessions'
 import { taskUserAcl } from '@humanlayer/db/tables/task-user-acl'
+import { ORGANIZATION_FEATURE_DEFAULTS } from '@humanlayer/db/utils/settings-defaults'
 import type { MultiplayerPromptingDuration } from '@humanlayer/riptide-api-contract/api/sessions/multiplayer-prompting/update'
 import { and, eq, inArray } from 'drizzle-orm'
 import { Clock, Data, Effect } from 'effect'
@@ -77,7 +78,9 @@ export const updateMultiplayerPromptingEffectProcedure =
 							.where(eq(organizationSettings.organization_id, organizationId))
 							.limit(1),
 					)
-					if (!settings?.enabled) return yield* Effect.fail(new MultiplayerPromptingFeatureDisabledError())
+					if (!(settings?.enabled ?? ORGANIZATION_FEATURE_DEFAULTS.multiplayer_prompting_enabled)) {
+						return yield* Effect.fail(new MultiplayerPromptingFeatureDisabledError())
+					}
 
 					const transactionId = yield* getTransactionId(transaction)
 					if (!input.settings.enabled) {

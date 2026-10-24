@@ -126,23 +126,220 @@ describe('settings', async () => {
 		)
 
 		expect(result.userSettings.theme).toBe('catppuccin')
-		expect(result.userSettings.experimentalSubagentsEnabled).toBe(false)
+		expect(result.userSettings.experimentalSubagentsEnabled).toBe(true)
 		expect(result.userSettings.claudeCodeEffectRuntimeEnabled).toBe(false)
 		expect(result.effective.claudeCodeEffectRuntimeEnabled).toBe(false)
-		expect(result.orgSettings.experimentalSubagentsEnabled).toBe(false)
-		expect(result.orgSettings.multiplayerPromptingEnabled).toBe(false)
+		expect(result.orgSettings.experimentalSubagentsEnabled).toBe(true)
+		expect(result.orgSettings.haikuResearchSubagentsEnabled).toBe(true)
+		expect(result.orgSettings.multiplayerPromptingEnabled).toBe(true)
 		expect(result.orgSettings.syncVersion).toBe(2)
 		expect(result.orgSettings.syncVisibility).toBe('v2')
-		expect(result.effective.experimentalSubagentsEnabled).toBe(false)
+		expect(result.effective.experimentalSubagentsEnabled).toBe(true)
 		expect(result.userSettings.onboardingDismissedAt).toBeNull()
 		expect(result.userSettings.firstTaskCompletedAt).toBeNull()
 		expect(result.userSettings.firstStructuredWorkflowCompletedAt).toBeNull()
 		expect(result.userSettings.firstInboundCommentReceivedAt).toBeNull()
-		expect(result.userSettings.projectsV2Enabled).toBe(false)
+		expect(result.userSettings.projectsV2Enabled).toBe(true)
 		expect(result.userSettings.projectsV2AssignedVariant).toBeNull()
 		expect(result.userSettings.projectsV2AssignedAt).toBeNull()
 		expect(result.userSettings.experiments).toEqual({})
+		const admin = await call(
+			getOrgSettingsProcedure,
+			{},
+			{
+				context: createMockApiContext({ auth: makeAdminAuth(userId, orgId), services }),
+			},
+		)
+		expect(admin).toMatchObject({
+			experimentalSubagentsEnabled: true,
+			haikuResearchSubagentsEnabled: true,
+			multiplayerPromptingEnabled: true,
+			jiraIntegrationEnabled: false,
+			linearIntegrationEnabled: false,
+			slackIntegrationEnabled: false,
+			githubIntegrationEnabled: false,
+			commitTrackingEnabled: false,
+			prTrackingEnabled: false,
+			advancedMetricsVisibleToAllMembers: false,
+		})
+		const daemon = await call(
+			daemonGetSettingsProcedure,
+			{},
+			{
+				context: createMockDaemonContext({ auth: makeDaemonAuth(userId, orgId), services }),
+			},
+		)
+		expect(daemon).toMatchObject({
+			experimentalSubagentsEnabled: true,
+			haikuResearchSubagentsEnabled: false,
+			jiraEnabled: false,
+			linearEnabled: false,
+			commitTrackingEnabled: false,
+			prTrackingEnabled: false,
+		})
+		expect(result.effective).toMatchObject({
+			haikuResearchSubagentsEnabled: false,
+			jiraEnabled: false,
+			linearEnabled: false,
+		})
+		expect(result.userSettings.haikuResearchSubagentsEnabled).toBe(false)
+		expect(
+			await db.select().from(organizationSettings).where(eq(organizationSettings.organization_id, orgId)),
+		).toEqual([])
+		expect(await db.select().from(userSettings).where(eq(userSettings.organization_id, orgId))).toEqual([])
 	})
+
+	test.each(['direct insert', 'user write', 'admin write'] as const)(
+		'%s preserves missing-row feature availability and unrelated defaults',
+		async (firstWrite) => {
+			const userId = getUniqueUserId()
+			const orgId = await createTestOrg()
+			const userContext = { context: createMockApiContext({ auth: makeUserAuth(userId, orgId), services }) }
+			const adminContext = { context: createMockApiContext({ auth: makeAdminAuth(userId, orgId), services }) }
+			const before = await call(getUserSettingsProcedure, {}, userContext)
+			switch (firstWrite) {
+				case 'direct insert':
+					await db.insert(organizationSettings).values({ organization_id: orgId })
+					await db.insert(userSettings).values({ user_id: userId, organization_id: orgId })
+					break
+				case 'user write':
+					expect(await call(updateUserSettingsProcedure, { theme: 'monokai' }, userContext)).toMatchObject({
+						effective: before.effective,
+						orgSettings: before.orgSettings,
+					})
+					break
+				case 'admin write':
+					await call(setOrgSettingsProcedure, { defaultTaskShareLevel: 'read' }, adminContext)
+					break
+			}
+			const after = await call(getUserSettingsProcedure, {}, userContext)
+			expect(after.effective).toEqual(before.effective)
+			expect(after.orgSettings).toEqual(before.orgSettings)
+			expect(after.userSettings).toMatchObject({
+				experimentalSubagentsEnabled: true,
+				haikuResearchSubagentsEnabled: false,
+				defaultAgent: 'claude',
+				defaultModel: 'opus',
+				preferBatchQueueDelivery: true,
+				projectsV2Enabled: true,
+				experiments: {},
+			})
+			expect(await call(getOrgSettingsProcedure, {}, adminContext)).toMatchObject({
+				experimentalSubagentsEnabled: true,
+				haikuResearchSubagentsEnabled: true,
+				multiplayerPromptingEnabled: true,
+				jiraIntegrationEnabled: false,
+				linearIntegrationEnabled: false,
+				slackIntegrationEnabled: false,
+				githubIntegrationEnabled: false,
+				commitTrackingEnabled: false,
+				prTrackingEnabled: false,
+				advancedMetricsVisibleToAllMembers: false,
+				accessRequestsEnabled: true,
+				enableCreatingPubliclyShareableLinks: true,
+			})
+			expect(
+				await call(
+					daemonGetSettingsProcedure,
+					{},
+					{
+						context: createMockDaemonContext({ auth: makeDaemonAuth(userId, orgId), services }),
+					},
+				),
+			).toMatchObject({
+				experimentalSubagentsEnabled: true,
+				haikuResearchSubagentsEnabled: false,
+				jiraEnabled: false,
+				linearEnabled: false,
+				commitTrackingEnabled: false,
+				prTrackingEnabled: false,
+			})
+			const [storedOrg] = await db
+				.select()
+				.from(organizationSettings)
+				.where(eq(organizationSettings.organization_id, orgId))
+			const [storedUser] = await db.select().from(userSettings).where(eq(userSettings.organization_id, orgId))
+			if (firstWrite !== 'user write') {
+				expect(storedOrg).toMatchObject({
+					experimental_subagents_enabled: true,
+					haiku_research_subagents_enabled: true,
+					multiplayer_prompting_enabled: true,
+					commit_tracking_enabled: false,
+					pr_tracking_enabled: false,
+					advanced_metrics_visible_to_all_members: false,
+				})
+			} else expect(storedOrg).toBeUndefined()
+			if (firstWrite !== 'admin write') {
+				expect(storedUser).toMatchObject({
+					experimental_subagents_enabled: true,
+					haiku_research_subagents_enabled: false,
+					projects_v2_enabled: true,
+					metrics_advanced_enabled: true,
+				})
+			} else expect(storedUser).toBeUndefined()
+		},
+	)
+
+	test.each(['user', 'organization'] as const)(
+		'saved %s restrictions survive unrelated updates and stay organization-scoped',
+		async (restrictedBy) => {
+			const userId = getUniqueUserId()
+			const orgId = await createTestOrg()
+			const otherOrgId = await createTestOrg()
+			const userContext = { context: createMockApiContext({ auth: makeUserAuth(userId, orgId), services }) }
+			const adminContext = { context: createMockApiContext({ auth: makeAdminAuth(userId, orgId), services }) }
+			if (restrictedBy === 'user') {
+				await call(updateUserSettingsProcedure, { experimentalSubagentsEnabled: false }, userContext)
+			} else {
+				await call(
+					setOrgSettingsProcedure,
+					{
+						experimentalSubagentsEnabled: false,
+						haikuResearchSubagentsEnabled: false,
+						multiplayerPromptingEnabled: false,
+					},
+					adminContext,
+				)
+			}
+			await call(updateUserSettingsProcedure, { theme: 'dracula' }, userContext)
+			await call(setOrgSettingsProcedure, { defaultTaskShareLevel: 'read' }, adminContext)
+			expect((await call(getUserSettingsProcedure, {}, userContext)).effective.experimentalSubagentsEnabled).toBe(
+				false,
+			)
+			expect(
+				(
+					await call(
+						daemonGetSettingsProcedure,
+						{},
+						{
+							context: createMockDaemonContext({ auth: makeDaemonAuth(userId, orgId), services }),
+						},
+					)
+				).experimentalSubagentsEnabled,
+			).toBe(false)
+			if (restrictedBy === 'organization') {
+				expect(await call(getOrgSettingsProcedure, {}, adminContext)).toMatchObject({
+					experimentalSubagentsEnabled: false,
+					haikuResearchSubagentsEnabled: false,
+					multiplayerPromptingEnabled: false,
+				})
+				await expect(
+					call(updateUserSettingsProcedure, { experimentalSubagentsEnabled: true }, userContext),
+				).rejects.toMatchObject({ code: 'FEATURE_DISABLED_BY_ORG' })
+			}
+			expect(
+				(
+					await call(
+						getUserSettingsProcedure,
+						{},
+						{
+							context: createMockApiContext({ auth: makeUserAuth(userId, otherOrgId), services }),
+						},
+					)
+				).effective.experimentalSubagentsEnabled,
+			).toBe(true)
+		},
+	)
 
 	test('experiment flags merge per key and survive unrelated updates', async () => {
 		const userId = getUniqueUserId()
@@ -184,7 +381,7 @@ describe('settings', async () => {
 		expect(persisted.userSettings.experiments).toEqual({ githubPrPanelEnabled: false, roundedCornersEnabled: true })
 	})
 
-	test('Projects V2 defaults off, supports opt-in and sparse updates, and ignores opt-out', async () => {
+	test('Projects V2 stays enabled across legacy opt-in, sparse updates, and opt-out requests', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
 		const auth = makeUserAuth(userId, orgId)
@@ -208,14 +405,57 @@ describe('settings', async () => {
 		expect(persistedAfterOptOut.userSettings.projectsV2Enabled).toBe(true)
 	})
 
-	test('Projects V2 opt-out on a new settings row stays off', async () => {
+	test('Projects V2 opt-out on a new settings row cannot disable released access', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
 		const context = createMockApiContext({ auth: makeUserAuth(userId, orgId), services })
 
 		const result = await call(updateUserSettingsProcedure, { projectsV2Enabled: false }, { context })
-		expect(result.userSettings.projectsV2Enabled).toBe(false)
+		expect(result.userSettings.projectsV2Enabled).toBe(true)
+		expect(result.userSettings.projectsV2AssignedVariant).toBeNull()
+		expect(result.userSettings.projectsV2AssignedAt).toBeNull()
 	})
+
+	test.each([{}, { projectsV2Enabled: false }, { projectsV2AssignedVariant: 'v1' as const }])(
+		'any settings update releases a legacy row without changing its saved choices (%j)',
+		async (input) => {
+			const userId = getUniqueUserId()
+			const orgId = await createTestOrg()
+			const otherOrgId = await createTestOrg()
+			const saved = {
+				user_id: userId,
+				projects_v2_enabled: false,
+				projects_v2_assigned_variant: 'v1' as const,
+				projects_v2_assigned_at: 1_700_000_000_000n,
+				experimental_subagents_enabled: false,
+				haiku_research_subagents_enabled: false,
+				metrics_advanced_enabled: false,
+				prefer_batch_queue_delivery: false,
+				experiment_flags: { scratchPadEnabled: false },
+			}
+			await db.insert(userSettings).values([
+				{ ...saved, organization_id: orgId },
+				{ ...saved, organization_id: otherOrgId },
+			])
+			const before = await db.select().from(userSettings).where(eq(userSettings.user_id, userId))
+			const context = createMockApiContext({ auth: makeUserAuth(userId, orgId), services })
+			const result = await call(updateUserSettingsProcedure, input, { context })
+			expect(result.userSettings).toMatchObject({
+				projectsV2Enabled: true,
+				projectsV2AssignedVariant: 'v1',
+				projectsV2AssignedAt: Number(saved.projects_v2_assigned_at),
+			})
+			expect((await call(getUserSettingsProcedure, {}, { context })).userSettings).toEqual(result.userSettings)
+			const after = await db.select().from(userSettings).where(eq(userSettings.user_id, userId))
+			for (const row of before) {
+				expect(after.find((candidate) => candidate.organization_id === row.organization_id)).toEqual(
+					row.organization_id === orgId
+						? { ...row, projects_v2_enabled: true, updated_at: expect.any(BigInt) }
+						: row,
+				)
+			}
+		},
+	)
 
 	describe('Projects V2 experiment assignment', () => {
 		let assignmentRuntime: ReturnType<typeof createRuntimeWithTestPostgresLayer> | undefined
@@ -284,13 +524,13 @@ describe('settings', async () => {
 			expect(persisted.userSettings.projectsV2Enabled).toBe(true)
 		})
 
-		test('saves a V1 group without turning access on', async () => {
+		test('saves a legacy V1 group without disabling released access', async () => {
 			const { userId, orgId, context } = await assignmentContext()
 
 			const result = await call(updateWithAssignment, { projectsV2AssignedVariant: 'v1' }, { context })
 
 			expect(result.userSettings.projectsV2AssignedVariant).toBe('v1')
-			expect(result.userSettings.projectsV2Enabled).toBe(false)
+			expect(result.userSettings.projectsV2Enabled).toBe(true)
 			await vi.waitFor(() => expect(eventsFor(userId, orgId)).toHaveLength(1))
 			expect(eventsFor(userId, orgId)[0]?.assignedVariant).toBe('v1')
 		})
@@ -305,7 +545,7 @@ describe('settings', async () => {
 			for (const result of [repeated, changed]) {
 				expect(result.userSettings.projectsV2AssignedVariant).toBe('v1')
 				expect(result.userSettings.projectsV2AssignedAt).toBe(first.userSettings.projectsV2AssignedAt)
-				expect(result.userSettings.projectsV2Enabled).toBe(false)
+				expect(result.userSettings.projectsV2Enabled).toBe(true)
 			}
 			await vi.waitFor(() => expect(eventsFor(userId, orgId)).toHaveLength(1))
 			// Give any stray detached fiber a chance to run before asserting there was only one.
@@ -324,9 +564,11 @@ describe('settings', async () => {
 
 			const row = await storedRow(userId, orgId)
 			for (const result of results) {
+				expect(result.userSettings.projectsV2Enabled).toBe(true)
 				expect(result.userSettings.projectsV2AssignedVariant).toBe(row?.projects_v2_assigned_variant)
 				expect(result.userSettings.projectsV2AssignedAt).toBe(Number(row?.projects_v2_assigned_at))
 			}
+			expect(row?.projects_v2_enabled).toBe(true)
 			await vi.waitFor(() => expect(eventsFor(userId, orgId)).toHaveLength(1))
 			await new Promise((resolve) => setTimeout(resolve, 50))
 			expect(eventsFor(userId, orgId)).toHaveLength(1)
@@ -589,6 +831,7 @@ describe('settings', async () => {
 	test('FEATURE_DISABLED_BY_ORG: user cannot enable subagents when org has it disabled', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
+		await db.insert(organizationSettings).values({ organization_id: orgId, experimental_subagents_enabled: false })
 		await expect(
 			call(
 				updateUserSettingsProcedure,
@@ -619,7 +862,7 @@ describe('settings', async () => {
 				}),
 			},
 		)
-		expect(getResult.experimentalSubagentsEnabled).toBe(false)
+		expect(getResult.experimentalSubagentsEnabled).toBe(true)
 		expect(getResult.syncVersion).toBe(2)
 		expect(getResult.syncVisibility).toBe('v2')
 
@@ -652,7 +895,7 @@ describe('settings', async () => {
 		expect(getAfter.experimentalSubagentsEnabled).toBe(true)
 	})
 
-	test('multiplayer prompting defaults false, round-trips, projects to users, and preserves sparse settings', async () => {
+	test('multiplayer prompting defaults true, round-trips, projects to users, and preserves sparse settings', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
 		const adminAuth = makeAdminAuth(userId, orgId)
@@ -665,7 +908,7 @@ describe('settings', async () => {
 				context: createMockApiContext({ auth: adminAuth, services }),
 			},
 		)
-		expect(defaults.multiplayerPromptingEnabled).toBe(false)
+		expect(defaults.multiplayerPromptingEnabled).toBe(true)
 
 		await call(
 			setOrgSettingsProcedure,
@@ -1075,7 +1318,9 @@ describe('settings', async () => {
 			},
 		)
 
-		// User keeps subagents off (default)
+		await db
+			.insert(userSettings)
+			.values({ user_id: userId, organization_id: orgId, experimental_subagents_enabled: false })
 		const result = await call(
 			getUserSettingsProcedure,
 			{},
@@ -1166,8 +1411,7 @@ describe('settings', async () => {
 			},
 		)
 
-		// With no org or user settings, defaults to false
-		expect(result.experimentalSubagentsEnabled).toBe(false)
+		expect(result.experimentalSubagentsEnabled).toBe(true)
 		expect(result.claudeCodeEffectRuntimeEnabled).toBe(false)
 	})
 
@@ -1189,7 +1433,9 @@ describe('settings', async () => {
 			},
 		)
 
-		// User has NOT enabled (no user_settings row => defaults to false)
+		await db
+			.insert(userSettings)
+			.values({ user_id: userId, organization_id: orgId, experimental_subagents_enabled: false })
 		const result = await call(
 			daemonGetSettingsProcedure,
 			{},
@@ -1321,7 +1567,7 @@ describe('settings', async () => {
 		)
 
 		expect(result.userSettings.haikuResearchSubagentsEnabled).toBe(false)
-		// org has no row => ORG_DEFAULTS applies (false for settings-get USER_DEFAULTS/ORG_DEFAULTS)
+		expect(result.orgSettings.haikuResearchSubagentsEnabled).toBe(true)
 		expect(result.effective.haikuResearchSubagentsEnabled).toBe(false)
 	})
 
@@ -2098,6 +2344,20 @@ describe('settings', async () => {
 			.limit(1)
 		expect(row?.metrics_advanced_enabled).toBe(false)
 		expect(row?.theme).toBe('dracula')
+		const otherOrgId = await createTestOrg()
+		await call(
+			updateUserSettingsProcedure,
+			{ experimentalSubagentsEnabled: false },
+			{
+				context: createMockApiContext({ auth: makeUserAuth(userId, otherOrgId), services }),
+			},
+		)
+		const [after] = await db
+			.select()
+			.from(userSettings)
+			.where(and(eq(userSettings.user_id, userId), eq(userSettings.organization_id, orgId)))
+		expect(after?.metrics_advanced_enabled).toBe(false)
+		expect(after?.experimental_subagents_enabled).toBe(true)
 	})
 
 	// ==================== V2 Compatibility Fields ====================

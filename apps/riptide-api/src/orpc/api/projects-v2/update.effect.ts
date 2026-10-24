@@ -14,7 +14,6 @@ export const updateProjectV2Procedure = effectOrpcBaseOrganizationRequired.proje
 		changes: input,
 	}).pipe(
 		Effect.catchTags({
-			ProjectsV2Disabled: () => Effect.fail(errors.FORBIDDEN()),
 			ProjectMutationForbidden: () => Effect.fail(errors.FORBIDDEN()),
 			ProjectNotFound: () => Effect.fail(errors.NOT_FOUND({ data: { message: 'Project not found' } })),
 			ProjectLocationInvalid: (error) => Effect.fail(errors.BAD_REQUEST({ data: { message: error.message } })),

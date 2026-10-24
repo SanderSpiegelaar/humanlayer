@@ -1,6 +1,7 @@
 import { artifacts } from '@humanlayer/db/tables/artifacts'
 import { organizationSettings } from '@humanlayer/db/tables/organization-settings'
 import { organizations } from '@humanlayer/db/tables/organizations'
+import { ORGANIZATION_FEATURE_DEFAULTS } from '@humanlayer/db/utils/settings-defaults'
 import { and, eq } from 'drizzle-orm'
 import { Clock, Effect } from 'effect'
 
@@ -119,13 +120,19 @@ export const setOrgSettingsEffectProcedure =
 							.insert(organizationSettings)
 							.values({
 								organization_id: organizationId,
-								experimental_subagents_enabled: input.experimentalSubagentsEnabled ?? false,
-								haiku_research_subagents_enabled: input.haikuResearchSubagentsEnabled ?? true,
+								experimental_subagents_enabled:
+									input.experimentalSubagentsEnabled ??
+									ORGANIZATION_FEATURE_DEFAULTS.experimental_subagents_enabled,
+								haiku_research_subagents_enabled:
+									input.haikuResearchSubagentsEnabled ??
+									ORGANIZATION_FEATURE_DEFAULTS.haiku_research_subagents_enabled,
 								jira_integration_enabled: input.jiraIntegrationEnabled ?? false,
 								linear_integration_enabled: input.linearIntegrationEnabled ?? false,
 								slack_integration_enabled: input.slackIntegrationEnabled ?? false,
 								github_integration_enabled: input.githubIntegrationEnabled ?? false,
-								multiplayer_prompting_enabled: input.multiplayerPromptingEnabled ?? false,
+								multiplayer_prompting_enabled:
+									input.multiplayerPromptingEnabled ??
+									ORGANIZATION_FEATURE_DEFAULTS.multiplayer_prompting_enabled,
 								default_task_share_level: input.defaultTaskShareLevel ?? 'edit',
 								enable_creating_publicly_shareable_links:
 									input.enableCreatingPubliclyShareableLinks ?? true,

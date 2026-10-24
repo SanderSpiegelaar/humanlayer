@@ -78,15 +78,6 @@ describe('V2 workspace placements', () => {
 				.values({ id: organizationId, name: 'Placement tests', workos_organization_id: organizationId }),
 		)
 		yield* postgres.query(
-			postgres.client.insert(userSettings).values(
-				[owner, userId].map((user) => ({
-					organization_id: organizationId,
-					user_id: user,
-					projects_v2_enabled: true,
-				})),
-			),
-		)
-		yield* postgres.query(
 			postgres.client.insert(onlineHosts).values(
 				[owner, userId].map((user) => ({
 					organization_id: organizationId,
@@ -325,7 +316,7 @@ describe('V2 workspace placements', () => {
 		}).pipe(Effect.provide(testLayer())),
 	)
 
-	it.effect('requires edit permission, rollout opt-in and a caller-owned host before writing placement', () =>
+	it.effect('requires edit permission before writing placement without rollout settings', () =>
 		Effect.gen(function* () {
 			const fixture = yield* seed()
 			const postgres = yield* PostgresDb
@@ -344,21 +335,27 @@ describe('V2 workspace placements', () => {
 			expect(yield* createSessionV2(request(fixture)).pipe(Effect.flip)).toMatchObject({
 				_tag: 'ProjectNotFound',
 			})
-			yield* postgres.query(
-				postgres.client
-					.update(userSettings)
-					.set({ projects_v2_enabled: false })
-					.where(
-						and(
-							eq(userSettings.organization_id, fixture.organizationId),
-							eq(userSettings.user_id, fixture.userId),
-						),
-					),
-			)
-			expect(yield* createSessionV2(request(fixture)).pipe(Effect.flip)).toMatchObject({
-				_tag: 'ProjectsV2Disabled',
-			})
 			expect(yield* placements(fixture)).toHaveLength(0)
+		}).pipe(Effect.provide(testLayer())),
+	)
+
+	it.effect('creates an authorized placement despite legacy rollout-disabled access', () =>
+		Effect.gen(function* () {
+			const fixture = yield* seed()
+			const postgres = yield* PostgresDb
+			yield* postgres.query(
+				postgres.client.insert(userSettings).values({
+					organization_id: fixture.organizationId,
+					user_id: fixture.userId,
+					projects_v2_enabled: false,
+					projects_v2_assigned_variant: 'v1',
+					projects_v2_assigned_at: 1_700_000_000_000n,
+				}),
+			)
+			yield* selectManagedSources(fixture)
+			expect((yield* createSessionV2(request(fixture))).result).toBe('created')
+			expect(yield* placements(fixture)).toHaveLength(1)
+			expect(yield* statuses(fixture)).toHaveLength(2)
 		}).pipe(Effect.provide(testLayer())),
 	)
 

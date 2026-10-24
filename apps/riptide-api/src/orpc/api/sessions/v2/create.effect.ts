@@ -27,8 +27,6 @@ export const createSessionV2Procedure = effectOrpcBaseOrganizationRequired.sessi
 		defaultRepositoryIdentity: input.defaultRepositoryIdentity,
 	}).pipe(
 		Effect.catchTags({
-			ProjectsV2Disabled: () =>
-				Effect.fail(errors.FORBIDDEN({ message: 'Projects V2 is not enabled for this user.' })),
 			ProjectMutationForbidden: () =>
 				Effect.fail(errors.FORBIDDEN({ message: 'You do not have permission to launch this session.' })),
 			ProjectNotFound: (error) => Effect.fail(errors.TASK_NOT_FOUND({ data: { taskId: error.projectId } })),

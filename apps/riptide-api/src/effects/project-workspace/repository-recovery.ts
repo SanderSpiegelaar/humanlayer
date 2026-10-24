@@ -1,5 +1,4 @@
 import { tasks } from '@humanlayer/db/tables/tasks'
-import { userSettings } from '@humanlayer/db/tables/user-settings'
 import { workspaceRepositoryStatusForUserForHost } from '@humanlayer/db/tables/workspace-repository-status-for-user-for-host'
 import type { RepositorySourcePreference } from '@humanlayer/schemas/effect/project-workspace'
 import { and, eq } from 'drizzle-orm'
@@ -8,7 +7,6 @@ import { Clock, Effect } from 'effect'
 import { requireTaskEditPermission } from '../services/postgres/helpers'
 import { PostgresDb, type PostgresTransaction } from '../services/postgres/postgres-db.service'
 import {
-	ProjectsV2Disabled,
 	WorkspaceRepositoryProgressInvalid,
 	WorkspaceRepositoryNothingToRetry,
 	WorkspaceRepositorySkipNotAllowed,
@@ -27,24 +25,10 @@ type RecoveryInput = {
 	readonly expectedUpdatedAt: number
 }
 
-const requireProjectsV2Enabled = (transaction: PostgresTransaction, actor: RecoveryInput['actor']) =>
-	transaction
-		.query(
-			transaction.client
-				.select({ enabled: userSettings.projects_v2_enabled })
-				.from(userSettings)
-				.where(
-					and(eq(userSettings.organization_id, actor.organizationId), eq(userSettings.user_id, actor.userId)),
-				)
-				.limit(1),
-		)
-		.pipe(Effect.flatMap((rows) => (rows[0]?.enabled ? Effect.void : new ProjectsV2Disabled())))
-
 const loadRecoveryTarget = Effect.fn('project_workspace.load_recovery_target')(function* (
 	transaction: PostgresTransaction,
 	input: RecoveryInput,
 ) {
-	yield* requireProjectsV2Enabled(transaction, input.actor)
 	yield* requireTaskEditPermission(transaction, {
 		taskId: input.taskId,
 		userId: input.actor.userId,

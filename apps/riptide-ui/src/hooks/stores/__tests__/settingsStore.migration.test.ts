@@ -34,7 +34,7 @@ describe('settingsStore fresh defaults', () => {
 		expect(state.diffViewerEnabled).toBe(true)
 		expect(state.daemonDrivenWorkspaceSetupEnabled).toBe(true)
 		expect(state.useFoldCodingAgent).toBe(false)
-		expect(state.projectsV2Enabled).toBe(false)
+		expect(state.projectsV2Enabled).toBe(true)
 		expect(state.defaultCodelayerCodexModel).toBe('gpt-6.1-sol')
 	})
 
