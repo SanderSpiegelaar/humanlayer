@@ -41,6 +41,20 @@ export function caddyStatePath(registryPath: string): string {
 	return join(dirname(registryPath), 'caddy-state.json')
 }
 
+type AvailableStackRoute = { route: string; backend: string }
+
+function availableStackRoutes(stack: StackRecord): AvailableStackRoute[] {
+	return Object.entries(ROUTE_PORTS).flatMap(([routeName, portName]) => {
+		const route = stack.routes[routeName as keyof typeof ROUTE_PORTS]
+		if (!route) return []
+		const override =
+			routeName === 'api' ? stack.api?.backend : routeName === 'sync' ? stack.electric?.proxyBackend : undefined
+		const port = stack.ports[portName]
+		if (override == null && (!Number.isInteger(port) || port < 1 || port > 65535)) return []
+		return [{ route, backend: override ?? `127.0.0.1:${port}` }]
+	})
+}
+
 function escapeHtml(value: string): string {
 	return value
 		.replaceAll('&', '&amp;')
@@ -146,20 +160,10 @@ export function renderCaddyConfig(stacks: StackRecord[]): string {
 	const routeBlocks = [...stacks]
 		.sort((left, right) => left.id.localeCompare(right.id))
 		.flatMap((stack) =>
-			Object.entries(ROUTE_PORTS).flatMap(([routeName, portName]) => {
-				const route = stack.routes[routeName as keyof typeof ROUTE_PORTS]
-				// Records written before a route existed (e.g. s3) regain it on their next sync.
-				if (!route) return []
-				const backend =
-					routeName === 'api'
-						? (stack.api?.backend ?? `127.0.0.1:${stack.ports.api}`)
-						: routeName === 'sync'
-							? (stack.electric?.proxyBackend ?? `127.0.0.1:${stack.ports.electricProxy}`)
-							: `127.0.0.1:${stack.ports[portName]}`
-				return [
+			availableStackRoutes(stack).map(
+				({ route, backend }) =>
 					`${route} {\n\treverse_proxy ${backend} {\n\t\tflush_interval -1\n\t}\n\theader Cache-Control "no-cache, no-transform"\n\theader X-Accel-Buffering "no"\n}`,
-				]
-			}),
+			),
 		)
 	const index = `https://devstack.localhost {
 \theader Content-Type "text/html; charset=utf-8"
@@ -332,21 +336,7 @@ function expectedRoutes(registry: DevstackRegistry): ExpectedRoute[] {
 	return [
 		{ hostname: 'devstack.localhost' },
 		...Object.values(registry.stacks).flatMap((stack) =>
-			Object.entries(ROUTE_PORTS).flatMap(([routeName, portName]) => {
-				const route = stack.routes[routeName as keyof typeof ROUTE_PORTS]
-				if (!route) return []
-				return [
-					{
-						hostname: new URL(route).hostname,
-						backend:
-							routeName === 'api'
-								? (stack.api?.backend ?? `127.0.0.1:${stack.ports.api}`)
-								: routeName === 'sync'
-									? (stack.electric?.proxyBackend ?? `127.0.0.1:${stack.ports.electricProxy}`)
-									: `127.0.0.1:${stack.ports[portName]}`,
-					},
-				]
-			}),
+			availableStackRoutes(stack).map(({ route, backend }) => ({ hostname: new URL(route).hostname, backend })),
 		),
 	]
 }

@@ -18,6 +18,12 @@ import { getLinearClientId, getLinearClientSecret, getLinearOAuthRedirectUrl } f
 import { LinearService } from './lib/linear-service'
 import { requestBodyLimit } from './lib/request-body-limit'
 import { S3Service } from './lib/s3-service'
+import {
+	createStartupIntegrationService,
+	createUnavailableJiraService,
+	createUnavailableLinearService,
+	registerResendWebhookForStartup,
+} from './lib/unavailable-tracker-services'
 import { logger } from './logger'
 import { apiHandler, daemonApiHandler } from './orpc'
 import { registerGitHubSetupCallbackRoute, registerGitHubWebhookRoute } from './webhooks/github'
@@ -53,8 +59,22 @@ const s3Service = new S3Service(
 		: undefined,
 )
 
-const jiraService = new JiraService(getJiraClientId(), getJiraClientSecret(), db, getJiraOAuthRedirectUrl())
-const linearService = new LinearService(getLinearClientId(), getLinearClientSecret(), db, getLinearOAuthRedirectUrl())
+const jiraService = createStartupIntegrationService({
+	provider: 'jira',
+	stage: process.env.STAGE,
+	getCredentials: () => [getJiraClientId(), getJiraClientSecret()],
+	create: (clientId, clientSecret) => new JiraService(clientId, clientSecret, db, getJiraOAuthRedirectUrl()),
+	createUnavailable: createUnavailableJiraService,
+	warn: (message) => logger.warn(message),
+})
+const linearService = createStartupIntegrationService({
+	provider: 'linear',
+	stage: process.env.STAGE,
+	getCredentials: () => [getLinearClientId(), getLinearClientSecret()],
+	create: (clientId, clientSecret) => new LinearService(clientId, clientSecret, db, getLinearOAuthRedirectUrl()),
+	createUnavailable: createUnavailableLinearService,
+	warn: (message) => logger.warn(message),
+})
 const resend = new Resend(getResendApiKey())
 /**
  * App-runtime-backed facade for the WorkOS webhook's access-request backfill. The
@@ -108,7 +128,13 @@ registerWorkosWebhookRoute(app, {
 	db,
 	backfillAccessRequestRequesterUserId,
 })
-registerResendWebhookRoute(app, { resend, webhookSecret: getResendWebhookSecret(), logger })
+registerResendWebhookForStartup({
+	app,
+	stage: process.env.STAGE,
+	getWebhookSecret: getResendWebhookSecret,
+	register: (routeApp, webhookSecret) => registerResendWebhookRoute(routeApp, { resend, webhookSecret, logger }),
+	warn: (message) => logger.warn(message),
+})
 registerGitHubSetupCallbackRoute(app, { appRuntime, logger })
 registerGitHubWebhookRoute(app, { appRuntime, logger })
 registerJiraOAuthCallbackRoute(app, { jiraService, appRuntime, logger })

@@ -97,6 +97,36 @@ describe.skipIf(Boolean(process.env.CI))('ensureCaddy', () => {
 		expect(probeRoute).toHaveBeenCalledWith('devstack.localhost')
 	})
 
+	it('verifies startup without stale routes that have no backend port', async () => {
+		const path = await registryPath()
+		const storedRegistry = registry()
+		const first = storedRegistry.stacks.test!
+		storedRegistry.stacks.test = {
+			...first,
+			routes: { ...first.routes, s3: 'https://s3.main.localhost' },
+			ports: { ...first.ports, rustfsApi: undefined },
+		} as unknown as StackRecord
+		await writeFile(path, JSON.stringify(storedRegistry))
+		const start = vi.fn().mockResolvedValue({ running: true, pid: 12, configPath: 'config' })
+		const probeRoute = vi.fn().mockResolvedValue(undefined)
+
+		await expect(
+			ensureCaddy(path, {
+				runtime: {
+					status: vi.fn().mockResolvedValue({ running: false, pid: null, configPath: 'config' }),
+					start,
+					fetch: vi.fn().mockResolvedValue(Response.json(activeConfig())) as unknown as typeof fetch,
+					probeRoute,
+				},
+			}),
+		).resolves.toMatchObject({ plannedAction: 'start', running: true })
+
+		expect(start).toHaveBeenCalledOnce()
+		expect(probeRoute).toHaveBeenCalledWith('ui.test.localhost')
+		expect(probeRoute).toHaveBeenCalledWith('api.test.localhost')
+		expect(probeRoute).not.toHaveBeenCalledWith('s3.main.localhost')
+	})
+
 	it('restarts after failed convergence and verifies the replacement', async () => {
 		const path = await registryPath()
 		const restart = vi.fn().mockResolvedValue({ running: true, pid: 13, configPath: 'config' })
@@ -182,6 +212,45 @@ describe.skipIf(Boolean(process.env.CI))('renderCaddyConfig', () => {
 
 		expect(config.indexOf('<code>a-stack</code>')).toBeLessThan(config.indexOf('<code>z-stack</code>'))
 		expect(config).toContain('data-health-url="https://api.z.localhost?x=&quot;unsafe&quot;/health"')
+	})
+
+	it('omits routes without valid ports while retaining routes from other stacks', () => {
+		const first = registry().stacks.test!
+		const staleStack = {
+			...first,
+			id: 'legacy',
+			routes: { ...first.routes, s3: 'https://s3.legacy.localhost' },
+			ports: { ...first.ports, rustfsApi: undefined },
+		} as unknown as StackRecord
+		const freshStack = {
+			...first,
+			id: 'fresh',
+			routes: { ...first.routes, s3: 'https://s3.fresh.localhost' },
+			ports: { ...first.ports, rustfsApi: 4107 },
+		} as StackRecord
+
+		const config = renderCaddyConfig([staleStack, freshStack])
+
+		expect(config).toContain('https://ui.test.localhost')
+		expect(config).not.toContain('s3.legacy.localhost {')
+		expect(config).toContain('https://s3.fresh.localhost {')
+		expect(config).toContain('reverse_proxy 127.0.0.1:4107')
+		expect(config).not.toContain('127.0.0.1:undefined')
+	})
+
+	it.each([undefined, 0, -1, 65536, 1.5])('omits routes with invalid fallback port %s', (port) => {
+		const first = registry().stacks.test!
+		const stack = {
+			...first,
+			routes: { ...first.routes, s3: 'https://s3.invalid.localhost' },
+			ports: { ...first.ports, rustfsApi: port },
+		} as unknown as StackRecord
+
+		const config = renderCaddyConfig([stack])
+
+		expect(config).not.toContain('https://s3.invalid.localhost {')
+		expect(config).toContain('https://ui.test.localhost {')
+		expect(config).not.toContain('127.0.0.1:undefined')
 	})
 })
 
