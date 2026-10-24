@@ -14,7 +14,6 @@ export const archiveProjectV2Procedure = effectOrpcBaseOrganizationRequired.proj
 		archived: input.archived,
 	}).pipe(
 		Effect.catchTags({
-			ProjectsV2Disabled: () => Effect.fail(errors.FORBIDDEN()),
 			ProjectMutationForbidden: () => Effect.fail(errors.FORBIDDEN()),
 			ProjectNotFound: () => Effect.fail(errors.NOT_FOUND({ data: { message: 'Project not found' } })),
 			ProjectPersistenceUnavailable: () => Effect.fail(errors.SERVICE_UNAVAILABLE()),

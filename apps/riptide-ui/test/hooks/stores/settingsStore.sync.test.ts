@@ -19,6 +19,7 @@ test('fresh settings enable research and multiplayer without selecting Haiku or 
 	const fresh = useSettingsStore.getInitialState()
 	expect(fresh.experimentalSubagentsEnabled).toBe(true)
 	expect(fresh.haikuResearchSubagentsEnabled).toBe(false)
+	expect(fresh.projectsV2Enabled).toBe(true)
 	expect(fresh.effectiveSettings).toEqual({
 		experimentalSubagentsEnabled: true,
 		haikuResearchSubagentsEnabled: false,
@@ -279,7 +280,34 @@ describe('settingsStore applyServerSettings', () => {
 		expect(state._serverSettingsAppliedScope).toBeNull()
 		expect(state.firstInboundCommentReceivedAt).toBeNull()
 		expect(state.experimentalSubagentsEnabled).toBe(false)
+		expect(state.projectsV2Enabled).toBe(false)
 		expect(state.effectiveSettings.experimentalSubagentsEnabled).toBe(false)
 		expect(state.orgSettings.multiplayerPromptingEnabled).toBe(false)
+	})
+
+	test('hydrates cached Projects V2 false and reconciles only after a valid scoped response and mutation guard', async () => {
+		const persisted = localStorage.getItem('riptide-settings')
+		try {
+			useSettingsStore.setState({ projectsV2Enabled: true })
+			// setState persists, so restore the legacy snapshot before normal hydration.
+			localStorage.setItem(
+				'riptide-settings',
+				JSON.stringify({ version: 41, state: { projectsV2Enabled: false } }),
+			)
+			await useSettingsStore.persist.rehydrate()
+			expect(useSettingsStore.getState().projectsV2Enabled).toBe(false)
+			useSettingsStore.getState().setServerSettingsScope('user-1:org-new')
+			useSettingsStore.getState().applyServerSettings(makeResponse(), scope)
+			expect(useSettingsStore.getState().projectsV2Enabled).toBe(false)
+			useSettingsStore.getState().markMutationInFlight()
+			useSettingsStore.getState().applyServerSettings(makeResponse(), 'user-1:org-new')
+			expect(useSettingsStore.getState().projectsV2Enabled).toBe(false)
+			useSettingsStore.setState({ _lastMutationAt: Date.now() - 6_000 })
+			useSettingsStore.getState().applyServerSettings(makeResponse(), 'user-1:org-new')
+			expect(useSettingsStore.getState().projectsV2Enabled).toBe(true)
+		} finally {
+			if (persisted === null) localStorage.removeItem('riptide-settings')
+			else localStorage.setItem('riptide-settings', persisted)
+		}
 	})
 })

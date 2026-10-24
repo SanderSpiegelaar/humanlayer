@@ -72,16 +72,17 @@ describe('projects v2', () => {
 		await cleanup?.()
 	}, 30_000)
 
-	async function setupActor(enabled = true) {
+	async function setupActor(enabled?: boolean) {
 		const organizationId = randomUUID()
 		const userId = `user-${randomUUID()}`
 		const hostId = `host-${randomUUID()}`
 		await db
 			.insert(organizations)
 			.values({ id: organizationId, name: 'Project test', workos_organization_id: `workos-${organizationId}` })
-		await db
-			.insert(userSettings)
-			.values({ organization_id: organizationId, user_id: userId, projects_v2_enabled: enabled })
+		if (enabled !== undefined)
+			await db
+				.insert(userSettings)
+				.values({ organization_id: organizationId, user_id: userId, projects_v2_enabled: enabled })
 		await db
 			.insert(onlineHosts)
 			.values({ organization_id: organizationId, user_id: userId, host_id: hostId, status: 'online' })
@@ -97,7 +98,7 @@ describe('projects v2', () => {
 		return { organizationId, userId, hostId, context: createMockApiContext({ auth, services }) }
 	}
 
-	test('atomically creates a path-free recipe and exact user-host location', async () => {
+	test('atomically creates a path-free recipe and exact user-host location without a settings row', async () => {
 		const actor = await setupActor()
 		const result = await call(
 			createProject,
@@ -124,25 +125,52 @@ describe('projects v2', () => {
 			.where(eq(repositoryLocationsForUserForHost.organization_id, actor.organizationId))
 		expect(projectRows).toHaveLength(1)
 		expect(locationRows).toHaveLength(1)
+		expect(
+			await db.select().from(userSettings).where(eq(userSettings.organization_id, actor.organizationId)),
+		).toEqual([])
 	})
 
-	test('rejects creation while the user flag is off without partial rows', async () => {
+	test('creates projects for legacy rollout-disabled users', async () => {
 		const actor = await setupActor(false)
+		const result = await call(
+			createProject,
+			{
+				name: 'Released',
+				private: false,
+				hostId: actor.hostId,
+				repositories: [repository],
+				repositoryPaths: { [repository.repositoryIdentity]: '/tmp/repo' },
+			},
+			{ context: actor.context },
+		)
+		const rows = await db.select().from(projects).where(eq(projects.organization_id, actor.organizationId))
+		expect(rows).toHaveLength(1)
+		expect(rows[0]?.id).toBe(result.project.id)
+	})
+
+	test('rejects another user host without partial project or location rows', async () => {
+		const actor = await setupActor()
+		const other = await setupActor()
 		await expect(
 			call(
 				createProject,
 				{
-					name: 'Disabled',
+					name: 'Unauthorized host',
 					private: false,
-					hostId: actor.hostId,
+					hostId: other.hostId,
 					repositories: [repository],
 					repositoryPaths: { [repository.repositoryIdentity]: '/tmp/repo' },
 				},
 				{ context: actor.context },
 			),
-		).rejects.toMatchObject({ code: 'FORBIDDEN' })
-		const rows = await db.select().from(projects).where(eq(projects.organization_id, actor.organizationId))
-		expect(rows).toHaveLength(0)
+		).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+		expect(await db.select().from(projects).where(eq(projects.organization_id, actor.organizationId))).toEqual([])
+		expect(
+			await db
+				.select()
+				.from(repositoryLocationsForUserForHost)
+				.where(eq(repositoryLocationsForUserForHost.organization_id, actor.organizationId)),
+		).toEqual([])
 	})
 
 	test('rejects an incomplete initial location at the wire adapter without creating rows', async () => {

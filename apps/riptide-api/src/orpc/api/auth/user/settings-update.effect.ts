@@ -82,6 +82,7 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 		// Build the set of columns to update (only those provided in input)
 		const updateSet: PgUpdateSetSource<typeof userSettings> = {
 			updated_at: BigInt(Date.now()),
+			projects_v2_enabled: USER_FEATURE_DEFAULTS.projects_v2_enabled,
 		}
 		if (input.theme !== undefined) updateSet.theme = input.theme
 		if (input.experimentalSubagentsEnabled !== undefined)
@@ -96,10 +97,6 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 			updateSet.prefer_batch_queue_delivery = input.preferBatchQueueDelivery
 		if (input.sidebarVariant !== undefined) updateSet.sidebar_variant = input.sidebarVariant
 		if (input.showTaskPhaseLabels !== undefined) updateSet.show_task_phase_labels = input.showTaskPhaseLabels
-		// Projects V2 access only turns on. `false` from older clients is accepted and ignored.
-		if (input.projectsV2Enabled === true) updateSet.projects_v2_enabled = true
-		else if (input.projectsV2AssignedVariant !== undefined)
-			updateSet.projects_v2_enabled = sql`${userSettings.projects_v2_enabled} OR ${userSettings.projects_v2_assigned_variant} = 'v2'`
 		if (input.experiments !== undefined)
 			updateSet.experiment_flags = sql`${userSettings.experiment_flags} || ${JSON.stringify(input.experiments)}::jsonb`
 		if (input.onboardingDismissedAt !== undefined)
@@ -111,7 +108,7 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 			.transaction((tx) =>
 				Effect.gen(function* () {
 					// Save the first experiment group only while none is saved, so retries and later
-					// flag values cannot replace it. A V2 group turns access on in the same write.
+					// flag values cannot replace it. Historical groups no longer control access.
 					// ON CONFLICT ... WHERE returns no row when a group already exists, which tells
 					// this call whether it made the first save.
 					let assignmentSaved = false
@@ -122,7 +119,6 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 							projects_v2_assigned_at: assignedAt,
 							updated_at: assignedAt,
 						}
-						if (assignedVariant === 'v2') assignmentSet.projects_v2_enabled = true
 						const saved = yield* tx.query(
 							tx.client
 								.insert(userSettings)
@@ -131,7 +127,7 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 									organization_id: organizationId,
 									projects_v2_assigned_variant: assignedVariant,
 									projects_v2_assigned_at: assignedAt,
-									projects_v2_enabled: assignedVariant === 'v2',
+									projects_v2_enabled: USER_FEATURE_DEFAULTS.projects_v2_enabled,
 								})
 								.onConflictDoUpdate({
 									target: [userSettings.user_id, userSettings.organization_id],
@@ -162,7 +158,7 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 								prefer_batch_queue_delivery: input.preferBatchQueueDelivery ?? true,
 								sidebar_variant: input.sidebarVariant ?? 'flat',
 								show_task_phase_labels: input.showTaskPhaseLabels ?? false,
-								projects_v2_enabled: input.projectsV2Enabled === true,
+								projects_v2_enabled: USER_FEATURE_DEFAULTS.projects_v2_enabled,
 								experiment_flags: input.experiments ?? {},
 								onboarding_dismissed_at:
 									input.onboardingDismissedAt === undefined || input.onboardingDismissedAt === null

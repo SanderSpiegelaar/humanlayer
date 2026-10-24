@@ -14,7 +14,6 @@ export const upsertProjectV2RepositorySourcesProcedure =
 			...input,
 		}).pipe(
 			Effect.catchTags({
-				ProjectsV2Disabled: () => Effect.fail(errors.FORBIDDEN()),
 				ProjectNotFound: (error) =>
 					Effect.fail(errors.PROJECT_NOT_FOUND({ data: { projectId: error.projectId } })),
 				ProjectLocationInvalid: (error) =>

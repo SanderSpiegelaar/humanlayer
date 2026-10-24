@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'vitest'
 
-import { onProjectsV2Flag, POSTHOG_INIT_CONFIG, resolveProjectsV2Flag } from '@/integrations/posthog/posthog'
+import {
+	capturePostHogEvent,
+	identifyPostHogUser,
+	initPostHog,
+	isPostHogEnabled,
+	onWorkflowSelectorFlag,
+	POSTHOG_INIT_CONFIG,
+	resetPostHogIdentity,
+	resolveWorkflowSelectorFlag,
+} from '@/integrations/posthog/posthog'
 
 describe('PostHog adapter configuration', () => {
 	test('allows named events and flags without broad browser capture', () => {
@@ -18,27 +27,32 @@ describe('PostHog adapter configuration', () => {
 	})
 })
 
-describe('Projects V2 flag', () => {
+describe('workflow selector flag', () => {
 	test.each([
-		['control', 'v1'],
-		['test', 'v2'],
+		[true, 'task-size'],
+		['task-size', 'task-size'],
+		[undefined, 'named'],
+		[false, 'named'],
+		['named', 'named'],
+		['control', 'named'],
+		['unknown', 'named'],
 	] as const)('maps PostHog variant %s to %s', (value, expected) => {
-		expect(resolveProjectsV2Flag(value)).toBe(expected)
+		expect(resolveWorkflowSelectorFlag(value)).toBe(expected)
 	})
 
-	test.each([undefined, true, false, '', 'v1', 'v2', 'Control', 'variant-b'] as const)(
-		'leaves %s unassigned',
-		(value) => {
-			expect(resolveProjectsV2Flag(value)).toBeUndefined()
-		},
-	)
-
-	test('never calls back when PostHog is not configured', () => {
-		let calls = 0
-		const unsubscribe = onProjectsV2Flag('user-a', () => {
-			calls += 1
+	test('keeps analytics inert and supplies the workflow fallback without a PostHog key', () => {
+		expect(isPostHogEnabled()).toBe(false)
+		expect(() => {
+			initPostHog()
+			identifyPostHogUser('user-a')
+			capturePostHogEvent('test-event', {})
+			resetPostHogIdentity()
+		}).not.toThrow()
+		const assignments: string[] = []
+		const unsubscribe = onWorkflowSelectorFlag((variant) => {
+			assignments.push(variant)
 		})
 		unsubscribe()
-		expect(calls).toBe(0)
+		expect(assignments).toEqual(['named'])
 	})
 })

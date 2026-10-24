@@ -683,7 +683,7 @@ export const useSettingsStore = create<SettingsState>()(
 			defaultAgent: 'claude' as const,
 			preferBatchQueueDelivery: true,
 			showTaskPhaseLabels: false,
-			projectsV2Enabled: false,
+			projectsV2Enabled: USER_FEATURE_DEFAULTS.projects_v2_enabled,
 			onboardingDismissedAt: null,
 			firstTaskCompletedAt: null,
 			firstStructuredWorkflowCompletedAt: null,

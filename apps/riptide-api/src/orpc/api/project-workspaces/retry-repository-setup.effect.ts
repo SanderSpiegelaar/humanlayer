@@ -15,7 +15,6 @@ export const retryProjectWorkspaceRepositorySetupProcedure =
 		}).pipe(
 			Effect.map((repository) => ({ repository })),
 			Effect.catchTags({
-				ProjectsV2Disabled: () => Effect.fail(errors.FORBIDDEN()),
 				TaskNotFoundError: () => Effect.fail(errors.NOT_FOUND({ data: { message: 'Repository not found' } })),
 				TaskPermissionDeniedError: () =>
 					Effect.fail(errors.NOT_FOUND({ data: { message: 'Repository not found' } })),

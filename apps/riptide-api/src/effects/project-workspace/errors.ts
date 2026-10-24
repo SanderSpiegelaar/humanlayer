@@ -4,7 +4,6 @@ import {
 } from '@humanlayer/schemas/effect/project-workspace'
 import * as Schema from 'effect/Schema'
 
-export class ProjectsV2Disabled extends Schema.TaggedError<ProjectsV2Disabled>()('ProjectsV2Disabled', {}) {}
 export class ProjectNotFound extends Schema.TaggedError<ProjectNotFound>()('ProjectNotFound', {
 	projectId: Schema.String,
 }) {}

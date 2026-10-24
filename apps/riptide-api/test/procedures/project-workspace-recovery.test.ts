@@ -71,11 +71,6 @@ describe('project workspace setup status and recovery', () => {
 			host_id: fixture.hostId,
 			status: 'online',
 		})
-		await db.insert(userSettings).values({
-			organization_id: fixture.organizationId,
-			user_id: fixture.userId,
-			projects_v2_enabled: true,
-		})
 		await db
 			.update(workspaceRepositoryStatusForUserForHost)
 			.set({ error: { stage: status, message: `${status} failed` } })
@@ -168,7 +163,7 @@ describe('project workspace setup status and recovery', () => {
 		expect(result.materializations.every((materialization) => materialization.repositories.length === 1)).toBe(true)
 	})
 
-	test('retries the same stage and rejects stale recovery actions', async () => {
+	test('retries without settings and rejects stale recovery actions', async () => {
 		const { fixture, taskId, context } = await setup('checking_source')
 		const before = await call(getStatus, { taskId }, { context })
 		const repository = before.materializations[0]!.repositories[0]!
@@ -180,6 +175,9 @@ describe('project workspace setup status and recovery', () => {
 		}
 		const result = await call(retry, input, { context })
 		expect(result.repository.status).toMatchObject({ status: 'checking_source', error: null })
+		expect(
+			await db.select().from(userSettings).where(eq(userSettings.organization_id, fixture.organizationId)),
+		).toEqual([])
 		await expect(call(retry, input, { context })).rejects.toMatchObject({ code: 'STATUS_CHANGED' })
 		await expect(
 			call(retry, { ...input, expectedUpdatedAt: result.repository.status.updatedAt }, { context }),

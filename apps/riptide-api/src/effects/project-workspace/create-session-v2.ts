@@ -2,7 +2,6 @@ import { conversationEvents } from '@humanlayer/db/tables/conversation-events'
 import { onlineHosts } from '@humanlayer/db/tables/online-hosts'
 import { sessions } from '@humanlayer/db/tables/sessions'
 import { tasks } from '@humanlayer/db/tables/tasks'
-import { userSettings } from '@humanlayer/db/tables/user-settings'
 import { workspaces, workspaceSelectSchema } from '@humanlayer/db/tables/workspaces'
 import type { CreateSessionV2Input } from '@humanlayer/riptide-api-contract/api/sessions/v2/create'
 import { resolveTaskWorkspacePathSegment } from '@humanlayer/riptide-api-contract/lib/task-workspace-path'
@@ -18,7 +17,6 @@ import {
 	ProjectLocationInvalid,
 	ProjectNotFound,
 	ProjectPersistenceUnavailable,
-	ProjectsV2Disabled,
 	ProjectMutationForbidden,
 } from './errors'
 import type { ProjectActorContext } from './project-operations'
@@ -43,19 +41,6 @@ export const createSessionV2 = Effect.fn('project_workspace.create_session_v2')(
 	const createdSession = yield* postgres
 		.transaction((transaction) =>
 			Effect.gen(function* () {
-				const [settings] = yield* transaction.query(
-					transaction.client
-						.select()
-						.from(userSettings)
-						.where(
-							and(
-								eq(userSettings.organization_id, input.actor.organizationId),
-								eq(userSettings.user_id, input.actor.userId),
-							),
-						)
-						.limit(1),
-				)
-				if (settings?.projects_v2_enabled !== true) return yield* new ProjectsV2Disabled()
 				const access = yield* transaction.run(() =>
 					checkTaskWritePermission(
 						transaction.client,

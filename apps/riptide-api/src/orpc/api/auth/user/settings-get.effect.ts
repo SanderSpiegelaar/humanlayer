@@ -20,7 +20,6 @@ const USER_DEFAULTS = {
 	prefer_batch_queue_delivery: true,
 	sidebar_variant: 'flat' as 'flat' | 'grouped',
 	show_task_phase_labels: false,
-	projects_v2_enabled: false,
 	projects_v2_assigned_variant: null,
 	projects_v2_assigned_at: null,
 	experiment_flags: {},

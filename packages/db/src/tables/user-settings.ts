@@ -59,11 +59,12 @@ export const userSettings = pgTable(
 		prefer_batch_queue_delivery: boolean('prefer_batch_queue_delivery').notNull().default(true),
 		sidebar_variant: text('sidebar_variant').$type<'flat' | 'grouped'>().notNull().default('flat'),
 		show_task_phase_labels: boolean('show_task_phase_labels').notNull().default(false),
-		projects_v2_enabled: boolean('projects_v2_enabled').notNull().default(false),
+		projects_v2_enabled: boolean('projects_v2_enabled')
+			.notNull()
+			.default(USER_FEATURE_DEFAULTS.projects_v2_enabled),
 		// The Projects V2 experiment group PostHog first chose in this organization, and when the
 		// server saved it. Written once (only while null) by auth.user.settings.update; never
-		// rewritten by later flag values. Separate from projects_v2_enabled, which is current access
-		// and can move from false to true through manual opt-in without changing the original group.
+		// rewritten by later flag values. Historical assignments no longer control released access.
 		projects_v2_assigned_variant: text('projects_v2_assigned_variant').$type<ProjectsV2Variant>(),
 		projects_v2_assigned_at: bigint('projects_v2_assigned_at', { mode: 'bigint' }),
 		experiment_flags: jsonb('experiment_flags').$type<ExperimentFlags>().notNull().default({}),

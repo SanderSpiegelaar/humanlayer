@@ -1,6 +1,5 @@
 import { onlineHosts } from '@humanlayer/db/tables/online-hosts'
 import { projects, projectSelectSchema } from '@humanlayer/db/tables/projects'
-import { userSettings } from '@humanlayer/db/tables/user-settings'
 import type {
 	ProjectV2,
 	ProjectLocationV2,
@@ -22,7 +21,6 @@ import {
 	ProjectMutationForbidden,
 	ProjectNotFound,
 	ProjectPersistenceUnavailable,
-	ProjectsV2Disabled,
 	RepositorySourcesInvalid,
 } from './errors'
 import { projectReadableByActor } from './project-authorization'
@@ -106,7 +104,6 @@ export const createProject = Effect.fn('project_workspace.create_project')(funct
 		'create_project',
 		postgres.transaction((transaction) =>
 			Effect.gen(function* () {
-				yield* requireProjectsV2Enabled(transaction, input.actor)
 				if (input.initialLocation !== undefined)
 					yield* requireHostBelongsToUser(transaction, input.actor, input.initialLocation.hostId)
 				const [projectRow] = yield* transaction.query(
@@ -157,7 +154,6 @@ export const updateProject = Effect.fn('project_workspace.update_project')(funct
 		'update_project',
 		postgres.transaction((transaction) =>
 			Effect.gen(function* () {
-				yield* requireProjectsV2Enabled(transaction, input.actor)
 				yield* requireProjectOwner(transaction, input.actor, input.projectId)
 				const [row] = yield* transaction.query(
 					transaction.client
@@ -194,7 +190,6 @@ export const archiveProject = Effect.fn('project_workspace.archive_project')(fun
 		'archive_project',
 		postgres.transaction((transaction) =>
 			Effect.gen(function* () {
-				yield* requireProjectsV2Enabled(transaction, input.actor)
 				yield* requireProjectOwner(transaction, input.actor, input.projectId)
 				const [row] = yield* transaction.query(
 					transaction.client
@@ -226,7 +221,6 @@ export const upsertProjectLocation = Effect.fn('project_workspace.upsert_project
 		'upsert_project_location',
 		postgres.transaction((transaction) =>
 			Effect.gen(function* () {
-				yield* requireProjectsV2Enabled(transaction, input.actor)
 				const project = yield* requireProjectInOrganization(transaction, input.actor, input.projectId)
 				yield* requireHostBelongsToUser(transaction, input.actor, input.hostId)
 				yield* validateProjectPaths(
@@ -269,7 +263,6 @@ export const getProjectRepositorySources = Effect.fn('project_workspace.get_proj
 			'get_project_repository_sources',
 			postgres.transaction((transaction) =>
 				Effect.gen(function* () {
-					yield* requireProjectsV2Enabled(transaction, input.actor)
 					const project = yield* requireReadableProject(transaction, input.actor, input.projectId)
 					yield* requireHostBelongsToUser(transaction, input.actor, input.hostId)
 					return yield* projectRepositorySourcesProjection(transaction, {
@@ -295,7 +288,6 @@ export const upsertProjectRepositorySources = Effect.fn('project_workspace.upser
 			'upsert_project_repository_sources',
 			postgres.transaction((transaction) =>
 				Effect.gen(function* () {
-					yield* requireProjectsV2Enabled(transaction, input.actor)
 					const project = yield* requireReadableProject(transaction, input.actor, input.projectId)
 					yield* requireHostBelongsToUser(transaction, input.actor, input.hostId)
 					yield* validateRepositorySourceIdentities(project.repositories, input.sources)
@@ -314,20 +306,6 @@ export const upsertProjectRepositorySources = Effect.fn('project_workspace.upser
 		)
 	},
 )
-
-function requireProjectsV2Enabled(transaction: PostgresTransaction, actor: ProjectActorContext) {
-	return transaction
-		.query(
-			transaction.client
-				.select({ enabled: userSettings.projects_v2_enabled })
-				.from(userSettings)
-				.where(
-					and(eq(userSettings.organization_id, actor.organizationId), eq(userSettings.user_id, actor.userId)),
-				)
-				.limit(1),
-		)
-		.pipe(Effect.flatMap((rows) => (rows[0]?.enabled ? Effect.void : new ProjectsV2Disabled())))
-}
 
 function requireHostBelongsToUser(transaction: PostgresTransaction, actor: ProjectActorContext, hostId: string) {
 	return transaction

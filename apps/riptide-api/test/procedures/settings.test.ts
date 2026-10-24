@@ -139,7 +139,7 @@ describe('settings', async () => {
 		expect(result.userSettings.firstTaskCompletedAt).toBeNull()
 		expect(result.userSettings.firstStructuredWorkflowCompletedAt).toBeNull()
 		expect(result.userSettings.firstInboundCommentReceivedAt).toBeNull()
-		expect(result.userSettings.projectsV2Enabled).toBe(false)
+		expect(result.userSettings.projectsV2Enabled).toBe(true)
 		expect(result.userSettings.projectsV2AssignedVariant).toBeNull()
 		expect(result.userSettings.projectsV2AssignedAt).toBeNull()
 		expect(result.userSettings.experiments).toEqual({})
@@ -221,7 +221,7 @@ describe('settings', async () => {
 				defaultAgent: 'claude',
 				defaultModel: 'opus',
 				preferBatchQueueDelivery: true,
-				projectsV2Enabled: false,
+				projectsV2Enabled: true,
 				experiments: {},
 			})
 			expect(await call(getOrgSettingsProcedure, {}, adminContext)).toMatchObject({
@@ -273,6 +273,7 @@ describe('settings', async () => {
 				expect(storedUser).toMatchObject({
 					experimental_subagents_enabled: true,
 					haiku_research_subagents_enabled: false,
+					projects_v2_enabled: true,
 					metrics_advanced_enabled: true,
 				})
 			} else expect(storedUser).toBeUndefined()
@@ -380,7 +381,7 @@ describe('settings', async () => {
 		expect(persisted.userSettings.experiments).toEqual({ githubPrPanelEnabled: false, roundedCornersEnabled: true })
 	})
 
-	test('Projects V2 defaults off, supports opt-in and sparse updates, and ignores opt-out', async () => {
+	test('Projects V2 stays enabled across legacy opt-in, sparse updates, and opt-out requests', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
 		const auth = makeUserAuth(userId, orgId)
@@ -404,14 +405,57 @@ describe('settings', async () => {
 		expect(persistedAfterOptOut.userSettings.projectsV2Enabled).toBe(true)
 	})
 
-	test('Projects V2 opt-out on a new settings row stays off', async () => {
+	test('Projects V2 opt-out on a new settings row cannot disable released access', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
 		const context = createMockApiContext({ auth: makeUserAuth(userId, orgId), services })
 
 		const result = await call(updateUserSettingsProcedure, { projectsV2Enabled: false }, { context })
-		expect(result.userSettings.projectsV2Enabled).toBe(false)
+		expect(result.userSettings.projectsV2Enabled).toBe(true)
+		expect(result.userSettings.projectsV2AssignedVariant).toBeNull()
+		expect(result.userSettings.projectsV2AssignedAt).toBeNull()
 	})
+
+	test.each([{}, { projectsV2Enabled: false }, { projectsV2AssignedVariant: 'v1' as const }])(
+		'any settings update releases a legacy row without changing its saved choices (%j)',
+		async (input) => {
+			const userId = getUniqueUserId()
+			const orgId = await createTestOrg()
+			const otherOrgId = await createTestOrg()
+			const saved = {
+				user_id: userId,
+				projects_v2_enabled: false,
+				projects_v2_assigned_variant: 'v1' as const,
+				projects_v2_assigned_at: 1_700_000_000_000n,
+				experimental_subagents_enabled: false,
+				haiku_research_subagents_enabled: false,
+				metrics_advanced_enabled: false,
+				prefer_batch_queue_delivery: false,
+				experiment_flags: { scratchPadEnabled: false },
+			}
+			await db.insert(userSettings).values([
+				{ ...saved, organization_id: orgId },
+				{ ...saved, organization_id: otherOrgId },
+			])
+			const before = await db.select().from(userSettings).where(eq(userSettings.user_id, userId))
+			const context = createMockApiContext({ auth: makeUserAuth(userId, orgId), services })
+			const result = await call(updateUserSettingsProcedure, input, { context })
+			expect(result.userSettings).toMatchObject({
+				projectsV2Enabled: true,
+				projectsV2AssignedVariant: 'v1',
+				projectsV2AssignedAt: Number(saved.projects_v2_assigned_at),
+			})
+			expect((await call(getUserSettingsProcedure, {}, { context })).userSettings).toEqual(result.userSettings)
+			const after = await db.select().from(userSettings).where(eq(userSettings.user_id, userId))
+			for (const row of before) {
+				expect(after.find((candidate) => candidate.organization_id === row.organization_id)).toEqual(
+					row.organization_id === orgId
+						? { ...row, projects_v2_enabled: true, updated_at: expect.any(BigInt) }
+						: row,
+				)
+			}
+		},
+	)
 
 	describe('Projects V2 experiment assignment', () => {
 		let assignmentRuntime: ReturnType<typeof createRuntimeWithTestPostgresLayer> | undefined
@@ -480,13 +524,13 @@ describe('settings', async () => {
 			expect(persisted.userSettings.projectsV2Enabled).toBe(true)
 		})
 
-		test('saves a V1 group without turning access on', async () => {
+		test('saves a legacy V1 group without disabling released access', async () => {
 			const { userId, orgId, context } = await assignmentContext()
 
 			const result = await call(updateWithAssignment, { projectsV2AssignedVariant: 'v1' }, { context })
 
 			expect(result.userSettings.projectsV2AssignedVariant).toBe('v1')
-			expect(result.userSettings.projectsV2Enabled).toBe(false)
+			expect(result.userSettings.projectsV2Enabled).toBe(true)
 			await vi.waitFor(() => expect(eventsFor(userId, orgId)).toHaveLength(1))
 			expect(eventsFor(userId, orgId)[0]?.assignedVariant).toBe('v1')
 		})
@@ -501,7 +545,7 @@ describe('settings', async () => {
 			for (const result of [repeated, changed]) {
 				expect(result.userSettings.projectsV2AssignedVariant).toBe('v1')
 				expect(result.userSettings.projectsV2AssignedAt).toBe(first.userSettings.projectsV2AssignedAt)
-				expect(result.userSettings.projectsV2Enabled).toBe(false)
+				expect(result.userSettings.projectsV2Enabled).toBe(true)
 			}
 			await vi.waitFor(() => expect(eventsFor(userId, orgId)).toHaveLength(1))
 			// Give any stray detached fiber a chance to run before asserting there was only one.
@@ -520,9 +564,11 @@ describe('settings', async () => {
 
 			const row = await storedRow(userId, orgId)
 			for (const result of results) {
+				expect(result.userSettings.projectsV2Enabled).toBe(true)
 				expect(result.userSettings.projectsV2AssignedVariant).toBe(row?.projects_v2_assigned_variant)
 				expect(result.userSettings.projectsV2AssignedAt).toBe(Number(row?.projects_v2_assigned_at))
 			}
+			expect(row?.projects_v2_enabled).toBe(true)
 			await vi.waitFor(() => expect(eventsFor(userId, orgId)).toHaveLength(1))
 			await new Promise((resolve) => setTimeout(resolve, 50))
 			expect(eventsFor(userId, orgId)).toHaveLength(1)

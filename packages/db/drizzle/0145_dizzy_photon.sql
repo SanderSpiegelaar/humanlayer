@@ -1,0 +1,1 @@
+ALTER TABLE "user_settings" ALTER COLUMN "projects_v2_enabled" SET DEFAULT true;
