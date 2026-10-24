@@ -3,6 +3,7 @@ import { bigint, boolean, check, pgTable, text, uuid } from 'drizzle-orm/pg-core
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from 'drizzle-zod'
 import z from 'zod/v4'
 
+import { ORGANIZATION_FEATURE_DEFAULTS } from '../utils/settings-defaults'
 import { organizations } from './organizations'
 
 export type SyncPathVersion = 1 | 2
@@ -35,13 +36,19 @@ export const organizationSettings = pgTable(
 			.notNull()
 			.$type<DefaultTaskShareLevel>()
 			.default('edit'),
-		experimental_subagents_enabled: boolean('experimental_subagents_enabled').notNull().default(true),
-		haiku_research_subagents_enabled: boolean('haiku_research_subagents_enabled').notNull().default(true),
+		experimental_subagents_enabled: boolean('experimental_subagents_enabled')
+			.notNull()
+			.default(ORGANIZATION_FEATURE_DEFAULTS.experimental_subagents_enabled),
+		haiku_research_subagents_enabled: boolean('haiku_research_subagents_enabled')
+			.notNull()
+			.default(ORGANIZATION_FEATURE_DEFAULTS.haiku_research_subagents_enabled),
 		jira_integration_enabled: boolean('jira_integration_enabled').notNull().default(false),
 		linear_integration_enabled: boolean('linear_integration_enabled').notNull().default(false),
 		slack_integration_enabled: boolean('slack_integration_enabled').notNull().default(false),
 		github_integration_enabled: boolean('github_integration_enabled').notNull().default(false),
-		multiplayer_prompting_enabled: boolean('multiplayer_prompting_enabled').notNull().default(true),
+		multiplayer_prompting_enabled: boolean('multiplayer_prompting_enabled')
+			.notNull()
+			.default(ORGANIZATION_FEATURE_DEFAULTS.multiplayer_prompting_enabled),
 		enable_creating_publicly_shareable_links: boolean('enable_creating_publicly_shareable_links')
 			.notNull()
 			.default(true),

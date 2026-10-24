@@ -2,6 +2,7 @@ import { jiraIntegrations } from '@humanlayer/db/tables/jira-integrations'
 import { linearIntegrations } from '@humanlayer/db/tables/linear-integrations'
 import { organizationSettings } from '@humanlayer/db/tables/organization-settings'
 import { userSettings } from '@humanlayer/db/tables/user-settings'
+import { ORGANIZATION_FEATURE_DEFAULTS, USER_FEATURE_DEFAULTS } from '@humanlayer/db/utils/settings-defaults'
 import { eq, isNull, sql } from 'drizzle-orm'
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core'
 import { Clock, Effect } from 'effect'
@@ -13,11 +14,9 @@ import { Sentry } from '../../../../instrument'
 import { effectOrpcBaseOrganizationRequired } from '../../../effect-base'
 
 const ORG_DEFAULTS = {
-	experimental_subagents_enabled: false,
-	haiku_research_subagents_enabled: false,
+	...ORGANIZATION_FEATURE_DEFAULTS,
 	jira_integration_enabled: false,
 	linear_integration_enabled: false,
-	multiplayer_prompting_enabled: false,
 	enable_creating_publicly_shareable_links: true,
 	commit_tracking_enabled: false,
 }
@@ -151,9 +150,13 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 								user_id: userId,
 								organization_id: organizationId,
 								theme: input.theme ?? 'catppuccin',
-								experimental_subagents_enabled: input.experimentalSubagentsEnabled ?? false,
+								experimental_subagents_enabled:
+									input.experimentalSubagentsEnabled ??
+									USER_FEATURE_DEFAULTS.experimental_subagents_enabled,
 								claude_code_effect_runtime_enabled: input.claudeCodeEffectRuntimeEnabled ?? false,
-								haiku_research_subagents_enabled: input.haikuResearchSubagentsEnabled ?? false,
+								haiku_research_subagents_enabled:
+									input.haikuResearchSubagentsEnabled ??
+									USER_FEATURE_DEFAULTS.haiku_research_subagents_enabled,
 								default_model: input.defaultModel ?? 'opus',
 								default_agent: input.defaultAgent ?? 'claude',
 								prefer_batch_queue_delivery: input.preferBatchQueueDelivery ?? true,
@@ -248,7 +251,7 @@ export const updateUserSettingsEffectProcedure = effectOrpcBaseOrganizationRequi
 				haikuResearchSubagentsEnabled: org.haiku_research_subagents_enabled,
 				jiraIntegrationEnabled: org.jira_integration_enabled ?? false,
 				linearIntegrationEnabled: org.linear_integration_enabled ?? false,
-				multiplayerPromptingEnabled: org.multiplayer_prompting_enabled ?? false,
+				multiplayerPromptingEnabled: org.multiplayer_prompting_enabled,
 				syncVersion: 2 as const,
 				syncVisibility: 'v2' as const,
 				enableCreatingPubliclyShareableLinks: org.enable_creating_publicly_shareable_links ?? true,

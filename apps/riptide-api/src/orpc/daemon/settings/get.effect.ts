@@ -2,6 +2,7 @@ import { jiraIntegrations } from '@humanlayer/db/tables/jira-integrations'
 import { linearIntegrations } from '@humanlayer/db/tables/linear-integrations'
 import { organizationSettings } from '@humanlayer/db/tables/organization-settings'
 import { userSettings } from '@humanlayer/db/tables/user-settings'
+import { ORGANIZATION_FEATURE_DEFAULTS, USER_FEATURE_DEFAULTS } from '@humanlayer/db/utils/settings-defaults'
 import { and, eq } from 'drizzle-orm'
 import { Effect } from 'effect'
 
@@ -11,9 +12,8 @@ import { Sentry } from '../../../instrument'
 import { effectOrpcDaemonBase } from '../../effect-base'
 
 const USER_DEFAULTS = {
-	experimental_subagents_enabled: false,
+	...USER_FEATURE_DEFAULTS,
 	claude_code_effect_runtime_enabled: false,
-	haiku_research_subagents_enabled: false,
 	// TRUE, matching the column default: a member with no user_settings row at all has made no
 	// choice, and the org opt-in is the decision that matters. This is the reader that actually
 	// governs collection for a fresh member — the column default never runs for them, because no
@@ -22,8 +22,7 @@ const USER_DEFAULTS = {
 }
 
 const ORG_DEFAULTS = {
-	experimental_subagents_enabled: false,
-	haiku_research_subagents_enabled: false,
+	...ORGANIZATION_FEATURE_DEFAULTS,
 	jira_integration_enabled: false,
 	linear_integration_enabled: false,
 	commit_tracking_enabled: false,

@@ -1,0 +1,1 @@
+ALTER TABLE "user_settings" ALTER COLUMN "experimental_subagents_enabled" SET DEFAULT true;

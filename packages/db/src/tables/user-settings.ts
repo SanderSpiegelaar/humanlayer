@@ -5,6 +5,7 @@ import { createInsertSchema, createSelectSchema, createUpdateSchema } from 'driz
 import z from 'zod/v4'
 
 import { jsonbParser } from '../utils/jsonb-parser'
+import { USER_FEATURE_DEFAULTS } from '../utils/settings-defaults'
 import { type ProjectsV2Variant, ProjectsV2VariantSchema } from '../zodschemas/projects-v2-variant'
 import { organizations } from './organizations'
 
@@ -45,9 +46,13 @@ export const userSettings = pgTable(
 			.references(() => organizations.id, { onDelete: 'cascade' })
 			.notNull(),
 		theme: text('theme').notNull().default('catppuccin'),
-		experimental_subagents_enabled: boolean('experimental_subagents_enabled').notNull().default(false),
+		experimental_subagents_enabled: boolean('experimental_subagents_enabled')
+			.notNull()
+			.default(USER_FEATURE_DEFAULTS.experimental_subagents_enabled),
 		claude_code_effect_runtime_enabled: boolean('claude_code_effect_runtime_enabled').notNull().default(false),
-		haiku_research_subagents_enabled: boolean('haiku_research_subagents_enabled').notNull().default(false),
+		haiku_research_subagents_enabled: boolean('haiku_research_subagents_enabled')
+			.notNull()
+			.default(USER_FEATURE_DEFAULTS.haiku_research_subagents_enabled),
 		default_model: text('default_model').notNull().default('opus'),
 		default_agent: text('default_agent').$type<DefaultCodingAgent>().notNull().default('claude'),
 		// Queue delivery mode: true = batch (all pending messages at once), false = one at a time

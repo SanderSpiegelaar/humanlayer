@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto'
 
 import { jiraIntegrations } from '@humanlayer/db/tables/jira-integrations'
+import { organizationSettings } from '@humanlayer/db/tables/organization-settings'
 import { organizations } from '@humanlayer/db/tables/organizations'
 import { call } from '@orpc/server'
+import { eq } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 
+import { JiraService } from '../../src/lib/jira-service'
 import { getOrgSettingsEffectProcedure as liveGetOrgSettingsProcedure } from '../../src/orpc/api/auth/admin/organizations-settings-get.effect'
 import { setOrgSettingsEffectProcedure as liveSetOrgSettingsProcedure } from '../../src/orpc/api/auth/admin/organizations-settings-set.effect'
 import { getUserSettingsEffectProcedure as liveGetUserSettingsProcedure } from '../../src/orpc/api/auth/user/settings-get.effect'
@@ -107,6 +110,74 @@ describe('jira-integration', async () => {
 		expect(result.connected).toBe(false)
 		expect(result.needsReauth).toBe(false)
 		expect(result.siteUrl).toBeNull()
+	})
+
+	test('a first Jira connection inherits unrelated defaults and reconnect preserves saved restrictions', async () => {
+		const userId = getUniqueUserId()
+		const orgId = await createTestOrg()
+		const jira = new JiraService('client-id', 'client-secret', db, 'https://api.example.test/jira/callback')
+		vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+			const url = input instanceof Request ? input.url : String(input)
+			if (url === 'https://auth.atlassian.com/oauth/token') {
+				return Response.json({
+					access_token: 'access',
+					refresh_token: 'refresh',
+					expires_in: 3600,
+					scope: 'read:jira-work',
+				})
+			}
+			if (url === 'https://api.atlassian.com/oauth/token/accessible-resources') {
+				return Response.json([
+					{ id: 'cloud-id', url: 'https://example.atlassian.net', name: 'Test Jira', scopes: [] },
+				])
+			}
+			throw new Error(`Unexpected provider request: ${url}`)
+		})
+		try {
+			expect(
+				await db.select().from(organizationSettings).where(eq(organizationSettings.organization_id, orgId)),
+			).toEqual([])
+			await jira.exchangeCode(orgId, userId, 'code')
+			const [settings] = await db
+				.select()
+				.from(organizationSettings)
+				.where(eq(organizationSettings.organization_id, orgId))
+			expect(settings).toMatchObject({
+				experimental_subagents_enabled: true,
+				haiku_research_subagents_enabled: true,
+				multiplayer_prompting_enabled: true,
+				jira_integration_enabled: true,
+				linear_integration_enabled: false,
+				slack_integration_enabled: false,
+				github_integration_enabled: false,
+				commit_tracking_enabled: false,
+				pr_tracking_enabled: false,
+				advanced_metrics_visible_to_all_members: false,
+			})
+			expect((await jira.getIntegrationStatus(orgId)).enabled).toBe(true)
+			await db
+				.update(organizationSettings)
+				.set({ experimental_subagents_enabled: false, multiplayer_prompting_enabled: false })
+				.where(eq(organizationSettings.organization_id, orgId))
+			await db
+				.update(jiraIntegrations)
+				.set({ needs_reauth: true })
+				.where(eq(jiraIntegrations.organization_id, orgId))
+			expect((await jira.getIntegrationStatus(orgId)).enabled).toBe(false)
+			await jira.exchangeCode(orgId, userId, 'reauth-code')
+			const [reconnected] = await db
+				.select()
+				.from(organizationSettings)
+				.where(eq(organizationSettings.organization_id, orgId))
+			expect(reconnected).toMatchObject({
+				experimental_subagents_enabled: false,
+				multiplayer_prompting_enabled: false,
+			})
+			await jira.disconnect(orgId)
+			expect((await jira.getIntegrationStatus(orgId)).connected).toBe(false)
+		} finally {
+			vi.unstubAllGlobals()
+		}
 	})
 
 	test('getStatus returns connected when integration exists', async () => {

@@ -1,4 +1,5 @@
 import { organizationSettings, type DefaultTaskShareLevel } from '@humanlayer/db/tables/organization-settings'
+import { ORGANIZATION_FEATURE_DEFAULTS } from '@humanlayer/db/utils/settings-defaults'
 import { eq } from 'drizzle-orm'
 import { Effect } from 'effect'
 
@@ -28,13 +29,19 @@ export const getOrgSettingsEffectProcedure =
 					const defaultTaskShareLevel: DefaultTaskShareLevel = row?.default_task_share_level ?? 'edit'
 
 					return {
-						experimentalSubagentsEnabled: row?.experimental_subagents_enabled ?? false,
-						haikuResearchSubagentsEnabled: row?.haiku_research_subagents_enabled ?? true,
+						experimentalSubagentsEnabled:
+							row?.experimental_subagents_enabled ??
+							ORGANIZATION_FEATURE_DEFAULTS.experimental_subagents_enabled,
+						haikuResearchSubagentsEnabled:
+							row?.haiku_research_subagents_enabled ??
+							ORGANIZATION_FEATURE_DEFAULTS.haiku_research_subagents_enabled,
 						jiraIntegrationEnabled: row?.jira_integration_enabled ?? false,
 						linearIntegrationEnabled: row?.linear_integration_enabled ?? false,
 						slackIntegrationEnabled: row?.slack_integration_enabled ?? false,
 						githubIntegrationEnabled: row?.github_integration_enabled ?? false,
-						multiplayerPromptingEnabled: row?.multiplayer_prompting_enabled ?? false,
+						multiplayerPromptingEnabled:
+							row?.multiplayer_prompting_enabled ??
+							ORGANIZATION_FEATURE_DEFAULTS.multiplayer_prompting_enabled,
 						defaultTaskShareLevel,
 						syncVersion: 2 as const,
 						syncVisibility: 'v2' as const,

@@ -148,6 +148,17 @@ describe('GitHub connection workflow', () => {
 					.where(eq(organizationSettings.organization_id, organizationId)),
 			)
 			expect(settings?.github_integration_enabled).toBe(true)
+			expect(settings).toMatchObject({
+				experimental_subagents_enabled: true,
+				haiku_research_subagents_enabled: true,
+				multiplayer_prompting_enabled: true,
+				jira_integration_enabled: false,
+				linear_integration_enabled: false,
+				slack_integration_enabled: false,
+				commit_tracking_enabled: false,
+				pr_tracking_enabled: false,
+				advanced_metrics_visible_to_all_members: false,
+			})
 			const [claim] = yield* Effect.promise(() => database.select().from(githubIntegrationInstallStates).limit(1))
 			expect(claim?.state_token_hash).not.toBe(state)
 			expect(claim?.consumed_at).not.toBeNull()
