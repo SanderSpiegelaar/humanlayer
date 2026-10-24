@@ -11,13 +11,11 @@ import { useMemo } from 'react'
 import { toast } from 'sonner'
 
 import { env } from '@/env'
-import { showBillingRequiredToast } from '@/lib/billing-required-toast'
 
 export function createApiClient(
 	getAccessToken?: () => Promise<string>,
 	signOut?: () => void,
 	navigate?: (opts: { to: string }) => void,
-	roles?: string[],
 ) {
 	const link = new OpenAPILink(RiptideApiContract, {
 		url: `${env.VITE_PUBLIC_RIPTIDE_API_ORIGIN}/rpc/api/v1`,
@@ -52,12 +50,6 @@ export function createApiClient(
 						}
 						break
 
-					case 'BILLING_REQUIRED': {
-						const isAdmin = roles?.includes('admin') ?? false
-						showBillingRequiredToast(isAdmin, navigate)
-						break
-					}
-
 					case 'FORBIDDEN':
 						toast.error("You don't have permission to perform this action.")
 						break
@@ -79,10 +71,6 @@ export function createApiClient(
 						toast.error(`Validation error: ${validationMessage}`)
 						break
 					}
-
-					case 'INVALID_PROMO_CODE':
-						toast.error('This promo code is not valid.')
-						break
 
 					case 'NETWORK_ERROR':
 						toast.error('Connection issue. Please check your internet connection.')
@@ -124,12 +112,12 @@ export function createApiClient(
  * Use this in components that need to make API calls.
  */
 export function useRiptideApi() {
-	const { getAccessToken, signOut, user, organizationId, roles } = useAuth()
+	const { getAccessToken, signOut, user, organizationId } = useAuth()
 	const navigate = useNavigate()
 
 	const api = useMemo(() => {
-		return createApiClient(user ? getAccessToken : undefined, signOut, navigate, roles ?? undefined)
-	}, [getAccessToken, signOut, navigate, roles, user?.id, organizationId])
+		return createApiClient(user ? getAccessToken : undefined, signOut, navigate)
+	}, [getAccessToken, signOut, navigate, user?.id, organizationId])
 
 	const authScope = { userId: user?.id ?? null, organizationId: organizationId ?? null }
 

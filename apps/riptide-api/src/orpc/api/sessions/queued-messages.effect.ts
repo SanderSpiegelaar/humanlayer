@@ -17,14 +17,13 @@ import {
 	hasRequiredSessionAccess,
 	SessionAccessControl,
 } from '../../../lib/session-multiplayer-prompting-auth'
-import { effectOrpcBaseOrganizationRequired, requiresBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcBaseOrganizationRequired } from '../../effect-base'
 import { ORPCBadRequestError, ORPCForbiddenError, ORPCNotFoundError } from '../../effect-errors'
 
 const QUEUE_ALLOWED_STATUSES = [...ACTIVE_SESSION_STATUSES] as const
 
-export const createQueuedMessageEffectProcedure = effectOrpcBaseOrganizationRequired.sessions.queuedMessages.create
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const createQueuedMessageEffectProcedure =
+	effectOrpcBaseOrganizationRequired.sessions.queuedMessages.create.effect(function* ({ input, context, errors }) {
 		const postgres = yield* PostgresDb
 		const nowMillis = yield* Clock.currentTimeMillis
 		const { userId, organizationId } = context.auth
@@ -126,9 +125,8 @@ export const createQueuedMessageEffectProcedure = effectOrpcBaseOrganizationRequ
 		return result
 	})
 
-export const deleteQueuedMessageEffectProcedure = effectOrpcBaseOrganizationRequired.sessions.queuedMessages.delete
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const deleteQueuedMessageEffectProcedure =
+	effectOrpcBaseOrganizationRequired.sessions.queuedMessages.delete.effect(function* ({ input, context, errors }) {
 		const postgres = yield* PostgresDb
 		const nowMillis = yield* Clock.currentTimeMillis
 		const { userId, organizationId } = context.auth

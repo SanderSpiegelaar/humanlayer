@@ -4,7 +4,6 @@ import { useLayoutEffect, useRef } from 'react'
 import type { PanelImperativeHandle } from 'react-resizable-panels'
 
 import { AppShell } from '@/components/app/AppShell'
-import { BillingBannerRail } from '@/components/BillingBannerRail'
 import { KeyboardAreaArbiter } from '@/components/KeyboardAreaArbiter'
 import { MinimalistTryBanner } from '@/components/MinimalistTryBanner'
 import { NetworkOfflineBanner } from '@/components/NetworkOfflineBanner'
@@ -103,7 +102,6 @@ function StandardAppLayout() {
 			<ViewportFileDropOverlay />
 			<NetworkOfflineBanner />
 			<SyncOfflineBanner />
-			<BillingBannerRail />
 			<MinimalistTryBanner />
 			<AppShell
 				layoutKey={LEFT_SIDEBAR_PANEL_LAYOUT_KEY}

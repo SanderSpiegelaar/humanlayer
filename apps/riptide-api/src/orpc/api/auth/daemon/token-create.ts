@@ -1,10 +1,9 @@
 import { createSignedDaemonToken } from '../../../../auth/daemon-tokens'
 import logger from '../../../../logger'
-import { apiBaseOrgRequired, requiresBillingMiddleware } from '../../../base'
+import { apiBaseOrgRequired } from '../../../base'
 
-export const createDaemonTokenProcedure = apiBaseOrgRequired.auth.daemon.token.create
-	.use(requiresBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
+export const createDaemonTokenProcedure = apiBaseOrgRequired.auth.daemon.token.create.handler(
+	async ({ input, context, errors }) => {
 		try {
 			const token = await createSignedDaemonToken(context.auth.userId, context.auth.organizationId, input.hostId)
 			return { token }
@@ -12,4 +11,5 @@ export const createDaemonTokenProcedure = apiBaseOrgRequired.auth.daemon.token.c
 			logger.error(error)
 			throw errors.INTERNAL_SERVER_ERROR()
 		}
-	})
+	},
+)

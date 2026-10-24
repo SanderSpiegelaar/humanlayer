@@ -5,7 +5,7 @@ import type {
 	ApiManifest,
 	RivetManifest,
 	ElectricManifest,
-	MinioManifest,
+	RustfsManifest,
 	OrganizationSeedDefaults,
 	PostgresManifest,
 	RedisManifest,
@@ -34,7 +34,7 @@ export type StackRecord = {
 	api: ApiManifest
 	electric: ElectricManifest
 	rivet?: RivetManifest
-	minio?: MinioManifest
+	rustfs?: RustfsManifest
 	redis?: RedisManifest
 	testServices?: TestServicesManifest
 }

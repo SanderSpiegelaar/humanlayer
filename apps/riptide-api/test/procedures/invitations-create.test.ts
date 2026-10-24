@@ -15,7 +15,6 @@ import { AccessRequestService } from '../../src/effects/services/access-request/
 import { makeWorkosServiceLive } from '../../src/effects/services/workos/workos.service'
 import { createAdminInvitationProcedure as liveCreateAdminInvitationProcedure } from '../../src/orpc/api/auth/admin/invitations-create'
 import type { Services } from '../../src/orpc/base'
-import { billingKvLayerFromTestService, TestBillingKvService } from '../fixtures/billing-kv-runtime'
 import { createMockApiAuth, createMockApiContext, StatefulMockWorkosService } from '../mocks'
 import { bindProcedureToRuntime, createRuntimeWithTestPostgresLayer } from '../utils/effect-procedure-test-runtime'
 import { requireExternalTestServices } from '../utils/external-test-services'
@@ -31,23 +30,6 @@ const noopAccessRequestsLayer = Layer.succeed(AccessRequestService, {
 	archiveRequest: () => Effect.void,
 })
 
-async function seedBilling(kv: TestBillingKvService, organizationId: string, priceId: string) {
-	const customerId = `cus_${organizationId}`
-	await kv.setOrgCustomerId(organizationId, customerId)
-	await kv.setSubscriptionCache(customerId, {
-		customerId,
-		organizationId,
-		subscriptionId: `sub_${organizationId}`,
-		status: 'active',
-		priceId,
-		currentPeriodEnd: 1_900_000_000,
-		hasPaidInvoice: false,
-		hasPaymentMethod: false,
-		pastDueAt: null,
-		syncedAt: Date.now(),
-	})
-}
-
 describe('api/auth/admin/invitations/create', () => {
 	function makeContext(orgId: string, userId: string, serviceOverrides?: Partial<Services>) {
 		return createMockApiContext({
@@ -56,11 +38,10 @@ describe('api/auth/admin/invitations/create', () => {
 		})
 	}
 
-	function bindProcedure(workos: StatefulMockWorkosService, kv?: TestBillingKvService) {
+	function bindProcedure(workos: StatefulMockWorkosService) {
 		const runtime = createRuntimeWithTestPostgresLayer({} as any, {
 			workos: makeWorkosServiceLive(workos),
 			accessRequests: noopAccessRequestsLayer,
-			...(kv ? { billingKv: billingKvLayerFromTestService(kv) } : {}),
 		})
 		return bindProcedureToRuntime(liveCreateAdminInvitationProcedure, runtime)
 	}
@@ -150,115 +131,52 @@ describe('api/auth/admin/invitations/create', () => {
 		expect(result.invitation.state).toBe('pending')
 	})
 
-	test('allows Starter invitation while active plus pending stays within free capacity', async () => {
-		vi.stubEnv('STRIPE_PRICE_STARTER', 'price_starter')
-		try {
-			const workos = new StatefulMockWorkosService()
-			const kv = new TestBillingKvService()
-			const userId = 'user_starter_below'
-			const orgId = 'org_starter_below'
-			workos.addUser({ id: userId, email: 'admin@example.com' })
-			workos.addOrganization({ id: orgId, name: 'Starter Org' })
-			workos.addMembership({ userId, organizationId: orgId, role: { slug: 'admin' } })
-			await seedBilling(kv, orgId, 'price_starter')
-
-			const result = await call(
-				bindProcedure(workos, kv),
-				{ email: 'second@example.com' },
-				{ context: makeContext(orgId, userId) },
-			)
-
-			expect(result.invitation.email).toBe('second@example.com')
-		} finally {
-			vi.unstubAllEnvs()
+	test('invites beyond the former capacity with existing members and pending invitations', async () => {
+		const workos = new StatefulMockWorkosService()
+		const userId = 'admin'
+		const orgId = 'selfhosted_org'
+		workos.addUser({ id: userId, email: 'admin@example.com' })
+		workos.addOrganization({ id: orgId, name: 'Self-hosted' })
+		workos.addMembership({ userId, organizationId: orgId, role: { slug: 'admin' } })
+		for (let index = 0; index < 8; index++) {
+			workos.addMembership({ userId: `member_${index}`, organizationId: orgId })
+			workos.addInvitation({ email: `pending${index}@example.com`, organizationId: orgId, state: 'pending' })
 		}
+		const result = await call(
+			bindProcedure(workos),
+			{ email: 'new@example.com' },
+			{ context: makeContext(orgId, userId) },
+		)
+		expect(result.invitation).toMatchObject({ email: 'new@example.com', state: 'pending' })
+		expect(workos._invitations.has(result.invitation.id)).toBe(true)
 	})
 
-	test('blocks Starter invitation at free capacity without creating invitation', async () => {
-		vi.stubEnv('STRIPE_PRICE_STARTER', 'price_starter')
-		try {
-			const workos = new StatefulMockWorkosService()
-			const kv = new TestBillingKvService()
-			const userId = 'user_starter_full'
-			const orgId = 'org_starter_full'
-			workos.addUser({ id: userId, email: 'admin@example.com' })
-			workos.addOrganization({ id: orgId, name: 'Starter Org' })
-			workos.addMembership({ userId, organizationId: orgId, role: { slug: 'admin' } })
-			workos.addMembership({ userId: 'user_2', organizationId: orgId })
-			workos.addMembership({ userId: 'user_3', organizationId: orgId })
-			await seedBilling(kv, orgId, 'price_starter')
-
-			let caughtError: any = null
-			try {
-				await call(
-					bindProcedure(workos, kv),
-					{ email: 'blocked@example.com' },
-					{ context: makeContext(orgId, userId) },
-				)
-			} catch (error) {
-				caughtError = error
-			}
-
-			expect(caughtError?.code).toBe('UPGRADE_REQUIRED')
-			expect(caughtError?.data).toMatchObject({ currentActiveSeats: 3, pendingInvitations: 0, freeCapacity: 3 })
-			expect(Array.from(workos._invitations.values()).some((inv) => inv.email === 'blocked@example.com')).toBe(
-				false,
-			)
-		} finally {
-			vi.unstubAllEnvs()
-		}
+	test('rejects an invitation from a non-admin', async () => {
+		const workos = new StatefulMockWorkosService()
+		await expect(
+			call(
+				bindProcedure(workos),
+				{ email: 'new@example.com' },
+				{ context: createMockApiContext({ auth: { role: 'member' } }) },
+			),
+		).rejects.toMatchObject({ code: 'FORBIDDEN' })
+		expect(workos._invitations.size).toBe(0)
 	})
 
-	test('counts pending invitations toward Starter free capacity', async () => {
-		vi.stubEnv('STRIPE_PRICE_STARTER', 'price_starter')
-		try {
-			const workos = new StatefulMockWorkosService()
-			const kv = new TestBillingKvService()
-			const userId = 'user_starter_pending'
-			const orgId = 'org_starter_pending'
-			workos.addUser({ id: userId, email: 'admin@example.com' })
-			workos.addOrganization({ id: orgId, name: 'Starter Org' })
-			workos.addMembership({ userId, organizationId: orgId, role: { slug: 'admin' } })
-			workos.addMembership({ userId: 'user_2', organizationId: orgId })
-			workos.addInvitation({ email: 'pending@example.com', organizationId: orgId, state: 'pending' })
-			await seedBilling(kv, orgId, 'price_starter')
-
-			await expect(
-				call(
-					bindProcedure(workos, kv),
-					{ email: 'blocked-pending@example.com' },
-					{ context: makeContext(orgId, userId) },
-				),
-			).rejects.toMatchObject({ code: 'UPGRADE_REQUIRED' })
-		} finally {
-			vi.unstubAllEnvs()
-		}
-	})
-
-	test('does not gate Pro invitations', async () => {
-		vi.stubEnv('STRIPE_PRICE_STARTER', 'price_starter')
-		try {
-			const workos = new StatefulMockWorkosService()
-			const kv = new TestBillingKvService()
-			const userId = 'user_pro'
-			const orgId = 'org_pro'
-			workos.addUser({ id: userId, email: 'admin@example.com' })
-			workos.addOrganization({ id: orgId, name: 'Pro Org' })
-			workos.addMembership({ userId, organizationId: orgId, role: { slug: 'admin' } })
-			workos.addMembership({ userId: 'user_2', organizationId: orgId })
-			workos.addMembership({ userId: 'user_3', organizationId: orgId })
-			await seedBilling(kv, orgId, 'price_pro')
-
-			const result = await call(
-				bindProcedure(workos, kv),
-				{ email: 'pro-invite@example.com' },
-				{ context: makeContext(orgId, userId) },
-			)
-
-			expect(result.invitation.email).toBe('pro-invite@example.com')
-		} finally {
-			vi.unstubAllEnvs()
-		}
+	test('rejects an invitation without organization context', async () => {
+		const workos = new StatefulMockWorkosService()
+		await expect(
+			call(
+				bindProcedure(workos),
+				{ email: 'new@example.com' },
+				{
+					context: createMockApiContext({
+						auth: { role: 'admin', organizationId: undefined, workosOrganizationId: undefined },
+					}),
+				},
+			),
+		).rejects.toMatchObject({ code: 'ORGANIZATION_REQUIRED' })
+		expect(workos._invitations.size).toBe(0)
 	})
 })
 

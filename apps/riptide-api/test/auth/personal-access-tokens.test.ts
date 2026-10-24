@@ -137,7 +137,6 @@ describe('personal access token policy', () => {
 			role: 'member',
 			roles: ['member'],
 			permissions: [],
-			entitlements: [],
 		})
 		expect(context?.organizationId).toBeTruthy()
 	})

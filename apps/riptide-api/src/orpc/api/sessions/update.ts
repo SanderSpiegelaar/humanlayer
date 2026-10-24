@@ -20,7 +20,7 @@ import {
 	type SessionAccessControlLevel,
 } from '../../../lib/session-multiplayer-prompting-auth'
 import logger from '../../../logger'
-import { apiBaseOrgRequired, requiresBillingMiddleware } from '../../base'
+import { apiBaseOrgRequired } from '../../base'
 
 /**
  * Update a session (user-facing endpoint)
@@ -30,9 +30,8 @@ import { apiBaseOrgRequired, requiresBillingMiddleware } from '../../base'
  * - If changing task_id to a new task, user must have write permission on target task
  * - When task changes, resource_owner_user_id is cascaded from new task to session + sub-resources
  */
-export const updateSessionApiProcedure = apiBaseOrgRequired.sessions.update
-	.use(requiresBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
+export const updateSessionApiProcedure = apiBaseOrgRequired.sessions.update.handler(
+	async ({ input, context, errors }) => {
 		const { services } = context
 		const { db } = services
 		const nowMillis = Date.now()
@@ -412,4 +411,5 @@ export const updateSessionApiProcedure = apiBaseOrgRequired.sessions.update
 			logger.error(error, 'Failed to update session')
 			throw errors.INTERNAL_SERVER_ERROR()
 		}
-	})
+	},
+)

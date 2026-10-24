@@ -1,11 +1,10 @@
 import * as Sentry from '@sentry/node'
 
 import logger from '../../../../logger'
-import { daemonBase, requiresDaemonBillingMiddleware } from '../../../base'
+import { daemonBase } from '../../../base'
 
-export const createJiraRemoteLinkProcedure = daemonBase.integrations.jira.createRemoteLink
-	.use(requiresDaemonBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
+export const createJiraRemoteLinkProcedure = daemonBase.integrations.jira.createRemoteLink.handler(
+	async ({ input, context, errors }) => {
 		const { organizationId } = context.auth
 		const { jira } = context.services
 		try {
@@ -17,4 +16,5 @@ export const createJiraRemoteLinkProcedure = daemonBase.integrations.jira.create
 				data: { message: error instanceof Error ? error.message : 'Failed to create Jira remote link' },
 			})
 		}
-	})
+	},
+)

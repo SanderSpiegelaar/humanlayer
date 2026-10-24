@@ -75,7 +75,7 @@ lint a single path and let the bash tool spool the output to a file you can grep
 # run typecheck for an individual package
 bun --bun run typecheck --filter @humanlayer/riptide-api
 
-# Tests for @humanlayer/riptide-api, @humanlayer/billing, @humanlayer/test-fixtures,
+# Tests for @humanlayer/riptide-api, @humanlayer/test-fixtures,
 # @humanlayer/riptide-electric-proxy, and @humanlayer/stale-daemon-sweeper require
 # test containers. Never run their package test scripts directly.
 #

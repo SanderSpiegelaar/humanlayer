@@ -28,7 +28,6 @@ import {
 	createMockJiraService,
 	createMockLinearService,
 	createMockS3Service,
-	createMockStripeService,
 	createMockWorkosService,
 } from '../mocks'
 import { bindProcedureToRuntime, createRuntimeWithTestPostgresLayer } from '../utils/effect-procedure-test-runtime'
@@ -56,7 +55,6 @@ describe('tasks v2 create', () => {
 
 	const services = {
 		workos: createMockWorkosService(),
-		stripe: createMockStripeService(),
 		s3: createMockS3Service(),
 		linear: createMockLinearService({
 			getIssue: async (_orgId: string, ticketId: string) => ({
@@ -143,7 +141,6 @@ describe('tasks v2 create', () => {
 			role: '',
 			roles: [] as string[],
 			permissions: [] as string[],
-			entitlements: [] as string[],
 			sessionId: 'session',
 		}
 		return { organizationId, userId, hostId, projectId, context: createMockApiContext({ auth, services }) }
@@ -174,7 +171,6 @@ describe('tasks v2 create', () => {
 				role: '',
 				roles: [],
 				permissions: [],
-				entitlements: [],
 				sessionId: 'session',
 			},
 			services,

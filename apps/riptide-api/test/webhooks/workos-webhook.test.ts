@@ -8,9 +8,8 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { hash } from 'ohash'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
-import type { IStripeService } from '../../src/lib/stripe-service'
 import type { WorkosEvent, WorkosSdkAdapter } from '../../src/lib/workos-service'
-import { createMockStripeService, createMockWorkosService } from '../mocks'
+import { createMockWorkosService } from '../mocks'
 import { createApp } from '../test-factory'
 import { createTestDb } from '../utils/test-db'
 
@@ -34,7 +33,6 @@ async function insertOrganization() {
 		.values({
 			name: 'WorkOS Webhook Org',
 			workos_organization_id: 'workos_org_webhook',
-			stripe_customer_id: 'cus_webhook',
 		})
 		.returning()
 
@@ -75,13 +73,11 @@ function buildIgnoredEvent(): WorkosEvent {
 	} as WorkosEvent
 }
 
-function createWorkosWebhookService(input?: { verifyError?: Error; activeSeatCount?: number; event?: WorkosEvent }): {
+function createWorkosWebhookService(input?: { verifyError?: Error; event?: WorkosEvent }): {
 	service: WorkosSdkAdapter
 	verifyCalls: string[]
-	countCalls: string[]
 } {
 	const verifyCalls: string[] = []
-	const countCalls: string[] = []
 	const base = createMockWorkosService({
 		verifyWebhook: async (payload: string, signature: string) => {
 			verifyCalls.push(`${signature}:${payload}`)
@@ -105,51 +101,21 @@ function createWorkosWebhookService(input?: { verifyError?: Error; activeSeatCou
 				userId: String((event.data as any).userId),
 			}
 		},
-		countActiveOrganizationMemberships: async (workosOrganizationId: string) => {
-			countCalls.push(workosOrganizationId)
-			return input?.activeSeatCount ?? 2
-		},
 	})
 
-	return { service: base, verifyCalls, countCalls }
+	return { service: base, verifyCalls }
 }
 
-function createStripeSeatService(input?: { updateError?: Error }): {
-	service: IStripeService
-	updates: Array<{ subscriptionItemId: string; quantity: number; prorationBehavior: string | undefined }>
-} {
-	const updates: Array<{ subscriptionItemId: string; quantity: number; prorationBehavior: string | undefined }> = []
-	return {
-		updates,
-		service: createMockStripeService({
-			findCurrentSubscriptionItemForCustomer: async (customerId: string) => ({
-				subscriptionId: 'sub_webhook',
-				subscriptionItemId: customerId === 'cus_webhook' ? 'si_webhook' : 'si_unknown',
-				priceId: 'price_pro_test',
-				quantity: 1,
-			}),
-			updateSubscriptionItemQuantity: async ({ subscriptionItemId, quantity, prorationBehavior }) => {
-				updates.push({ subscriptionItemId, quantity, prorationBehavior })
-				if (input?.updateError) {
-					throw input.updateError
-				}
-				return { id: subscriptionItemId, quantity } as any
-			},
-		}),
-	}
-}
-
-async function setupApp(input?: Parameters<typeof createWorkosWebhookService>[0] & { updateError?: Error }) {
+async function setupApp(input?: Parameters<typeof createWorkosWebhookService>[0]) {
 	await insertOrganization()
 	const workos = createWorkosWebhookService(input)
-	const stripe = createStripeSeatService(input)
-	const app = createApp({ db, workos: workos.service, stripe: stripe.service })
-	return { app, workos, stripe }
+	const app = createApp({ db, workos: workos.service })
+	return { app, workos }
 }
 
 describe('POST /webhooks/workos', () => {
-	test('returns 200 after valid membership delivery synchronously syncs seats', async () => {
-		const { app, workos, stripe } = await setupApp()
+	test('accepts membership delivery for an organization without billing state', async () => {
+		const { app, workos } = await setupApp()
 		const body = JSON.stringify(buildMembershipEvent())
 
 		const response = await app.request('/webhooks/workos', {
@@ -159,24 +125,12 @@ describe('POST /webhooks/workos', () => {
 		})
 
 		expect(response.status).toBe(200)
-		const json = await response.json()
-		expect((json as any).received).toBe(true)
-		expect((json as any).seatSync).toMatchObject({
-			organizationId: expect.any(String),
-			reason: 'workos_webhook',
-			seatCount: 2,
-			subscriptionId: 'sub_webhook',
-			subscriptionItemId: 'si_webhook',
-		})
+		expect(await response.json()).toEqual({ received: true })
 		expect(workos.verifyCalls).toEqual([`sig_valid:${body}`])
-		expect(workos.countCalls).toEqual(['workos_org_webhook'])
-		expect(stripe.updates).toEqual([
-			{ subscriptionItemId: 'si_webhook', quantity: 2, prorationBehavior: 'create_prorations' },
-		])
 	})
 
 	test('returns 400 when the signature header is missing', async () => {
-		const { app, workos, stripe } = await setupApp()
+		const { app, workos } = await setupApp()
 		const response = await app.request('/webhooks/workos', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -186,11 +140,10 @@ describe('POST /webhooks/workos', () => {
 		expect(response.status).toBe(400)
 		expect(await response.json()).toEqual({ error: 'Missing WorkOS-Signature header' })
 		expect(workos.verifyCalls).toEqual([])
-		expect(stripe.updates).toEqual([])
 	})
 
 	test('returns 400 for an invalid signature', async () => {
-		const { app, stripe } = await setupApp({ verifyError: new Error('bad signature') })
+		const { app } = await setupApp({ verifyError: new Error('bad signature') })
 
 		const response = await app.request('/webhooks/workos', {
 			method: 'POST',
@@ -200,11 +153,10 @@ describe('POST /webhooks/workos', () => {
 
 		expect(response.status).toBe(400)
 		expect(await response.json()).toEqual({ error: 'Invalid WorkOS webhook signature' })
-		expect(stripe.updates).toEqual([])
 	})
 
 	test('returns 200 and ignores non-membership events', async () => {
-		const { app, workos, stripe } = await setupApp()
+		const { app, workos } = await setupApp()
 		const body = JSON.stringify(buildIgnoredEvent())
 
 		const response = await app.request('/webhooks/workos', {
@@ -216,12 +168,16 @@ describe('POST /webhooks/workos', () => {
 		expect(response.status).toBe(200)
 		expect(await response.json()).toEqual({ received: true, ignored: true })
 		expect(workos.verifyCalls).toEqual([`sig_valid:${body}`])
-		expect(workos.countCalls).toEqual([])
-		expect(stripe.updates).toEqual([])
 	})
 
 	test('returns 500 when processing fails after verification', async () => {
-		const { app, workos, stripe } = await setupApp({ updateError: new Error('Stripe unavailable') })
+		const { app, workos } = await setupApp()
+		workos.service.getMembershipWebhookEvent = () => ({
+			eventId: 'missing_org_event',
+			eventType: 'organization_membership.updated',
+			workosOrganizationId: 'missing_org',
+			userId: 'user_webhook',
+		})
 
 		const response = await app.request('/webhooks/workos', {
 			method: 'POST',
@@ -231,8 +187,6 @@ describe('POST /webhooks/workos', () => {
 
 		expect(response.status).toBe(500)
 		expect(await response.json()).toEqual({ error: 'WorkOS webhook processing failed' })
-		expect(workos.countCalls).toEqual(['workos_org_webhook'])
-		expect(stripe.updates).toHaveLength(1)
 	})
 
 	test('uses raw body for signature verification', async () => {
@@ -310,7 +264,6 @@ describe('POST /webhooks/workos', () => {
 					userId: String((event.data as any).userId),
 				}
 			},
-			countActiveOrganizationMemberships: async () => 1,
 			userManagement: {
 				getUser: async (userId: string) => {
 					if (userId === newUserId) {
@@ -335,8 +288,7 @@ describe('POST /webhooks/workos', () => {
 			},
 		})
 
-		const stripe = createStripeSeatService()
-		const app = createApp({ db, workos: workosForBackfill, stripe: stripe.service })
+		const app = createApp({ db, workos: workosForBackfill })
 
 		const eventBody = JSON.stringify({
 			id: `event_membership_created_${Date.now()}`,

@@ -9,11 +9,10 @@ import { PostgresDb } from '../../../effects/services/postgres/postgres-db.servi
 import { S3 } from '../../../effects/services/s3/s3.service'
 import { normalizeSubpath } from '../../../lib/normalize-subpath'
 import { buildS3Key } from '../../../lib/s3-key-builder'
-import { effectOrpcBaseOrganizationRequired, requiresBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcBaseOrganizationRequired } from '../../effect-base'
 
-export const createUploadApiArtifactProcedure = effectOrpcBaseOrganizationRequired.artifacts.createUpload
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const createUploadApiArtifactProcedure = effectOrpcBaseOrganizationRequired.artifacts.createUpload.effect(
+	function* ({ input, context, errors }) {
 		const postgres = yield* PostgresDb
 		const s3 = yield* S3
 		const { organizationId, userId } = context.auth
@@ -78,4 +77,5 @@ export const createUploadApiArtifactProcedure = effectOrpcBaseOrganizationRequir
 			)
 
 		return { artifactId, uploadUrl, transactionId }
-	})
+	},
+)

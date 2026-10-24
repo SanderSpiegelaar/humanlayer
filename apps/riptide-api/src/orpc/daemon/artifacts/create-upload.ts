@@ -6,11 +6,10 @@ import { getTaskWithEffectivePermissions } from '../../../db/task-auth'
 import { normalizeSubpath } from '../../../lib/normalize-subpath'
 import { buildS3Key } from '../../../lib/s3-key-builder'
 import logger from '../../../logger'
-import { daemonBase, requiresDaemonBillingMiddleware } from '../../base'
+import { daemonBase } from '../../base'
 
-export const daemonCreateUploadProcedure = daemonBase.artifacts.createUpload
-	.use(requiresDaemonBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
+export const daemonCreateUploadProcedure = daemonBase.artifacts.createUpload.handler(
+	async ({ input, context, errors }) => {
 		const { taskId, fileName: rawFileName, contentType, contentHash, fileSizeBytes } = input
 		const fileName = normalizeSubpath(rawFileName)
 		const { organizationId, userId } = context.auth
@@ -87,4 +86,5 @@ export const daemonCreateUploadProcedure = daemonBase.artifacts.createUpload
 			uploadUrl,
 			transactionId: txResult.txid,
 		}
-	})
+	},
+)

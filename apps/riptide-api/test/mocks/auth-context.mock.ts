@@ -1,16 +1,13 @@
 import type { AuthContext, AuthContextOptionalOrg } from '../../src/auth/jwt-validator'
 import type { ApiContext, DaemonAuthContext, DaemonContext, Services } from '../../src/orpc/base'
-import { billingKvLayerFromTestService, TestBillingKvService } from '../fixtures/billing-kv-runtime'
 import {
 	createDefaultTestEffectRuntime,
 	createRuntimeWithTestPostgresLayer,
-	type TestRuntimeOptions,
 	workosLayerFromTestSdkAdapter,
 } from '../utils/effect-procedure-test-runtime'
 import { createMockJiraService } from './jira-service.mock'
 import { createMockLinearService } from './linear-service.mock'
 import { createMockS3Service } from './s3-service.mock'
-import { createMockStripeService } from './stripe-service.mock'
 import { createMockWorkosService } from './workos-service.mock'
 
 /**
@@ -20,28 +17,17 @@ import { createMockWorkosService } from './workos-service.mock'
  * `createMockDaemonContext`) and the headless-app `createTestServices` factory layer
  * on top of this function, so adding a new service to `Services` only requires a
  * default here. Overrides shallow-merge on top; pass only the services a test customizes.
- *
- * Billing access and entitlements are Effect services in the runtime, so a test that supplies
- * its own `effectRuntime` must build it with those runtime options instead.
  */
-export function createMockServices(
-	overrides?: Partial<Services>,
-	runtimeOptions?: Pick<TestRuntimeOptions, 'billingAccess' | 'entitlements'>,
-): Services {
-	const kv = new TestBillingKvService()
-	const billingKv = billingKvLayerFromTestService(kv)
+export function createMockServices(overrides?: Partial<Services>): Services {
 	const effectRuntime =
 		overrides?.effectRuntime ??
 		(overrides?.db
 			? createRuntimeWithTestPostgresLayer(overrides.db, {
 					...(overrides.workos ? { workos: workosLayerFromTestSdkAdapter(overrides.workos) } : {}),
-					billingKv,
-					...runtimeOptions,
 				})
-			: createDefaultTestEffectRuntime({ billingKv, ...runtimeOptions }))
+			: createDefaultTestEffectRuntime())
 	return {
 		workos: createMockWorkosService(),
-		stripe: createMockStripeService(),
 		s3: createMockS3Service(),
 		jira: createMockJiraService(),
 		linear: createMockLinearService(),
@@ -70,7 +56,6 @@ export function createMockApiAuth(overrides?: Partial<AuthContext>): AuthContext
 		role: '',
 		roles: [],
 		permissions: [],
-		entitlements: [],
 		sessionId: 'test-session-id',
 		...overrides,
 	}
@@ -94,7 +79,6 @@ export function createMockApiAuthNoOrg(overrides?: Partial<AuthContextOptionalOr
 		role: '',
 		roles: [],
 		permissions: [],
-		entitlements: [],
 		sessionId: 'test-session-id',
 		...overrides,
 	}
@@ -136,15 +120,10 @@ export function createMockDaemonAuth(overrides?: Partial<DaemonAuthContext>): Da
 export function createMockApiContext(overrides?: {
 	auth?: Partial<AuthContext> | null
 	services?: Partial<Services>
-	billingAccess?: TestRuntimeOptions['billingAccess']
-	entitlements?: TestRuntimeOptions['entitlements']
 }): ApiContext {
 	return {
 		auth: overrides?.auth === null ? null : createMockApiAuth(overrides?.auth),
-		services: createMockServices(overrides?.services, {
-			billingAccess: overrides?.billingAccess,
-			entitlements: overrides?.entitlements,
-		}),
+		services: createMockServices(overrides?.services),
 	}
 }
 
@@ -165,15 +144,10 @@ export function createMockApiContext(overrides?: {
 export function createMockApiContextNoOrg(overrides?: {
 	auth?: Partial<AuthContextOptionalOrg> | null
 	services?: Partial<Services>
-	billingAccess?: TestRuntimeOptions['billingAccess']
-	entitlements?: TestRuntimeOptions['entitlements']
 }): ApiContext {
 	return {
 		auth: overrides?.auth === null ? null : createMockApiAuthNoOrg(overrides?.auth),
-		services: createMockServices(overrides?.services, {
-			billingAccess: overrides?.billingAccess,
-			entitlements: overrides?.entitlements,
-		}),
+		services: createMockServices(overrides?.services),
 	}
 }
 
@@ -194,14 +168,9 @@ export function createMockApiContextNoOrg(overrides?: {
 export function createMockDaemonContext(overrides?: {
 	auth?: Partial<DaemonAuthContext> | null
 	services?: Partial<Services>
-	billingAccess?: TestRuntimeOptions['billingAccess']
-	entitlements?: TestRuntimeOptions['entitlements']
 }): DaemonContext {
 	return {
 		auth: overrides?.auth === null ? null : createMockDaemonAuth(overrides?.auth),
-		services: createMockServices(overrides?.services, {
-			billingAccess: overrides?.billingAccess,
-			entitlements: overrides?.entitlements,
-		}),
+		services: createMockServices(overrides?.services),
 	}
 }

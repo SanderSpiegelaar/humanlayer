@@ -2,7 +2,6 @@ import { ORPCError } from '@orpc/server'
 import * as Sentry from '@sentry/node'
 import type { OrganizationMembership } from '@workos-inc/node'
 
-import { syncOrganizationSeatQuantity } from '../../../../lib/seat-sync'
 import { logger } from '../../../../logger'
 import { apiBaseForOrganizationAdmin } from '../../../base'
 
@@ -10,7 +9,7 @@ export const adminDeactivateUserProcedure = apiBaseForOrganizationAdmin.auth.adm
 	async ({ context, input, errors }) => {
 		const {
 			auth,
-			services: { db, stripe, workos },
+			services: { workos },
 		} = context
 
 		if (input.userId === auth.userId) {
@@ -56,11 +55,6 @@ export const adminDeactivateUserProcedure = apiBaseForOrganizationAdmin.auth.adm
 
 			stage = 'workos_deactivation'
 			await workos.userManagement.deactivateOrganizationMembership(membership.id)
-			stage = 'seat_sync_after_deactivation'
-			await syncOrganizationSeatQuantity(
-				{ organizationId: auth.organizationId, reason: 'first_party_membership_mutation' },
-				{ workosService: workos, stripeService: stripe, db },
-			)
 
 			return { success: true as const }
 		} catch (error: unknown) {

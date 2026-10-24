@@ -1,8 +1,6 @@
 import z from 'zod/v4'
 
-import { billingRedirectSearchSchema } from '@/lib/billing/redirect'
-
-export const settingsSearchSchema = billingRedirectSearchSchema.extend({
+export const settingsSearchSchema = z.object({
 	slack_error: z.string().optional(),
 	github: z.enum(['connected', 'unclaimed']).optional(),
 	github_error: z.enum(['invalid_link', 'conflict', 'unavailable']).optional(),

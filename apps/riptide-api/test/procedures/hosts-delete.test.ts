@@ -15,7 +15,6 @@ import { Deferred, Effect, Fiber, Layer, Logger } from 'effect'
 import { TestClock } from 'effect/testing'
 import { afterAll, beforeAll, expect } from 'vitest'
 
-import { BillingAccess } from '../../src/effects/services/billing/billing-access.service'
 import {
 	makeEffectPostgresDbService,
 	PostgresDb,
@@ -445,37 +444,5 @@ describe('hosts.delete', () => {
 			),
 		).rejects.toMatchObject({ code: 'ORGANIZATION_REQUIRED' })
 		expect((await rowsForHost(hostId)).hosts).toHaveLength(1)
-	})
-
-	it('enforces billing before deleting an eligible registration', async () => {
-		const hostId = await seed({ last_seen: 0n })
-		const before = await rowsForHost(hostId)
-		const blockedRuntime = createRuntimeWithTestPostgresLayer(db, {
-			billingAccess: Layer.succeed(BillingAccess, {
-				decideForOperation: () => Effect.succeed('blocked' as const),
-				refreshStripeBillingCache: () => Effect.die('Unexpected billing refresh'),
-			}),
-		})
-		const previous = process.env.IS_BILLING_ENFORCEMENT_ENABLED
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			await expect(
-				call(
-					bindProcedureToRuntime(deleteHostEffectProcedure, blockedRuntime),
-					{ hostId },
-					{
-						context: createMockApiContext({
-							auth: createMockApiAuth({ organizationId, userId }),
-							services: { db, dbReadReplica: db, effectRuntime: blockedRuntime },
-						}),
-					},
-				),
-			).rejects.toMatchObject({ code: 'BILLING_REQUIRED' })
-			expect(await rowsForHost(hostId)).toEqual(before)
-		} finally {
-			if (previous === undefined) delete process.env.IS_BILLING_ENFORCEMENT_ENABLED
-			else process.env.IS_BILLING_ENFORCEMENT_ENABLED = previous
-			await blockedRuntime.dispose()
-		}
 	})
 })

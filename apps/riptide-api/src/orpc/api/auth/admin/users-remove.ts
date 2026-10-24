@@ -1,7 +1,6 @@
 import { ORPCError } from '@orpc/server'
 import type { OrganizationMembership } from '@workos-inc/node'
 
-import { syncOrganizationSeatQuantity } from '../../../../lib/seat-sync'
 import { logger } from '../../../../logger'
 import { apiBaseForOrganizationAdmin } from '../../../base'
 
@@ -9,7 +8,7 @@ export const adminRemoveUserProcedure = apiBaseForOrganizationAdmin.auth.admin.u
 	async ({ context, input, errors }) => {
 		const {
 			auth,
-			services: { db, stripe, workos },
+			services: { workos },
 		} = context
 
 		// Prevent self-removal
@@ -55,10 +54,6 @@ export const adminRemoveUserProcedure = apiBaseForOrganizationAdmin.auth.admin.u
 
 			// Delete the membership
 			await workos.userManagement.deleteOrganizationMembership(membership.id)
-			await syncOrganizationSeatQuantity(
-				{ organizationId: auth.organizationId, reason: 'first_party_membership_mutation' },
-				{ workosService: workos, stripeService: stripe, db },
-			)
 
 			return { success: true }
 		} catch (error: unknown) {

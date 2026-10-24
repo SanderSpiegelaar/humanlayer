@@ -10,7 +10,6 @@ import { useAuth } from '@workos-inc/authkit-react'
 import { useMemo } from 'react'
 import { toast } from 'sonner'
 
-import { showBillingRequiredToast } from '@/lib/billing-required-toast'
 import { logger } from '@/lib/logger'
 import type { NavigateFn } from '@/lib/settings-navigation'
 
@@ -39,13 +38,12 @@ interface RiptideApiErrorOptions {
 interface RiptideApiErrorDependencies {
 	navigate: NavigateFn
 	isOnOrgPages: boolean
-	roles: readonly string[] | null | undefined
 }
 
 export function handleRiptideApiError(
 	error: ORPCError<string, unknown>,
 	options: RiptideApiErrorOptions | undefined,
-	{ navigate, isOnOrgPages, roles }: RiptideApiErrorDependencies,
+	{ navigate, isOnOrgPages }: RiptideApiErrorDependencies,
 ): void {
 	if (options?.context?.silent) return
 
@@ -63,12 +61,6 @@ export function handleRiptideApiError(
 				navigate({ to: '/auth/organizations/select' })
 			}
 			break
-
-		case 'BILLING_REQUIRED': {
-			const isAdmin = roles?.includes('admin') ?? false
-			showBillingRequiredToast(isAdmin, navigate)
-			break
-		}
 
 		case 'TASK_SLUG_CONFLICT':
 		case 'TASK_LAUNCH_CONFLICT':
@@ -90,10 +82,6 @@ export function handleRiptideApiError(
 			toast.error(`Validation error: ${validationMessage}`)
 			break
 		}
-
-		case 'INVALID_PROMO_CODE':
-			toast.error('This promo code is not valid.')
-			break
 
 		case 'NETWORK_ERROR':
 			toast.error('Connection issue. Please check your internet connection.')
@@ -159,7 +147,7 @@ export function createRiptideApiErrorInterceptor(
  * ```
  */
 export function useRiptideApi() {
-	const { getAccessToken, user, organizationId, roles } = useAuth()
+	const { getAccessToken, user, organizationId } = useAuth()
 	const navigate = useNavigate()
 	const pathname = useLocation({ select: (loc) => loc.pathname })
 	const isOnOrgPages = pathname.includes('auth/organizations')
@@ -172,7 +160,7 @@ export function useRiptideApi() {
 				const accessToken = await getAccessToken()
 				return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
 			},
-			interceptors: [createRiptideApiErrorInterceptor({ navigate, isOnOrgPages, roles })],
+			interceptors: [createRiptideApiErrorInterceptor({ navigate, isOnOrgPages })],
 		})
 
 		// Raw client for direct API calls
@@ -182,7 +170,7 @@ export function useRiptideApi() {
 		const queryClient = createTanstackQueryUtils(client)
 
 		return { client, queryClient }
-	}, [getAccessToken, user, user?.id, organizationId, isOnOrgPages, roles])
+	}, [getAccessToken, user, user?.id, organizationId, isOnOrgPages, navigate])
 
 	const authScope = { userId: user?.id ?? null, organizationId: organizationId ?? null }
 

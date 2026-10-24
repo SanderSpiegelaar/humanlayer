@@ -1,22 +1,16 @@
 import { Button } from '@humanlayer/ui/components/button'
 import { Separator } from '@humanlayer/ui/components/separator'
-import { useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useAuth } from '@workos-inc/authkit-react'
 import { Check, Copy } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-import { useRiptideApi } from '@/api/client'
-import { BillingTabContent } from '@/components/settings/BillingTabContent'
-import { ExperimentsSection } from '@/components/settings/ExperimentsSection'
 import { IntegrationsSection } from '@/components/settings/IntegrationsSection'
 import { OptionalFeaturesSection } from '@/components/settings/OptionalFeaturesSection'
 import { OrganizationDomainsSection } from '@/components/settings/OrganizationDomainsSection'
 import { TaskSharingSection } from '@/components/settings/TaskSharingSection'
 import { useUserInfo } from '@/hooks/useUserInfo'
-import { useBillingVisible } from '@/lib/billing-visibility'
-import { BillingRedirectResult } from '@/lib/billing/components/BillingRedirectResult'
 import { settingsSearchSchema } from '@/lib/settings-search'
 
 export const Route = createFileRoute('/settings')({
@@ -59,12 +53,7 @@ function OrganizationIdBlock() {
 }
 
 function SettingsPage() {
-	const { billing, billing_error: billingError } = Route.useSearch()
 	const { isLoading, user, organizationId, role, roles } = useAuth()
-	const navigate = useNavigate()
-	const { queryClient: api } = useRiptideApi()
-	const queryClient = useQueryClient()
-	const billingVisible = useBillingVisible()
 
 	if (isLoading || !user || !organizationId || !role || !roles) return null
 	if (!roles?.includes('admin')) {
@@ -77,21 +66,6 @@ function SettingsPage() {
 
 	return (
 		<div className="w-full p-6">
-			{billing || billingError ? (
-				<BillingRedirectResult
-					key={`${billing ?? ''}:${billingError ?? ''}`}
-					billing={billing}
-					billingError={billingError}
-					onHandled={() => {
-						void queryClient.invalidateQueries({ queryKey: api.auth.admin.billing.info.key() })
-						navigate({
-							to: '/settings',
-							search: (previous) => ({ ...previous, billing: undefined, billing_error: undefined }),
-							replace: true,
-						})
-					}}
-				/>
-			) : null}
 			{/* Page Header */}
 			<div className="mb-8">
 				<h1 className="text-lg font-bold">Settings</h1>
@@ -106,22 +80,6 @@ function SettingsPage() {
 				<TaskSharingSection />
 				<Separator />
 				<IntegrationsSection />
-				{billingVisible && (
-					<>
-						<Separator />
-						<section>
-							<div className="mb-4">
-								<h2 className="text-base font-semibold">Billing</h2>
-								<p className="text-sm text-muted-foreground">
-									Manage your organization's billing and subscription.
-								</p>
-							</div>
-							<BillingTabContent />
-						</section>
-					</>
-				)}
-				<Separator />
-				<ExperimentsSection />
 				<Separator />
 				<OrganizationDomainsSection />
 			</div>

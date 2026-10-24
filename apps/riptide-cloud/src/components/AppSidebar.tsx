@@ -37,8 +37,6 @@ export function AppSidebar() {
 		{ title: 'Team Metrics', url: '/metrics', icon: BarChart },
 	]
 
-	// Mirrors the /admin/advanced-metrics route guard: entitled org, and either an admin or an org
-	// that shares the page with every member.
 	if (advancedMetricsVisible) {
 		items.push({ title: 'Advanced Metrics', url: '/admin/advanced-metrics', icon: Gauge })
 	}

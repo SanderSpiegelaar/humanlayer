@@ -6,7 +6,7 @@ import { Clock, Effect } from 'effect'
 import { mapPostgresErrorToResponse } from '../../../effects/services/postgres/error-mapping'
 import { PostgresDb } from '../../../effects/services/postgres/postgres-db.service'
 import { Sentry } from '../../../instrument'
-import { effectOrpcBaseOrganizationRequired, requiresBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcBaseOrganizationRequired } from '../../effect-base'
 
 /**
  * Verify the shard is a released, non-admin-dismissed shard in the caller's
@@ -73,9 +73,8 @@ export const upsertUserShardPreference = Effect.fn('contextShards.upsertUserPref
  * update the same row. Never touches shared shard content or another user's
  * preference.
  */
-export const updateContextShardPreferenceProcedure = effectOrpcBaseOrganizationRequired.contextShards.updatePreference
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const updateContextShardPreferenceProcedure =
+	effectOrpcBaseOrganizationRequired.contextShards.updatePreference.effect(function* ({ input, context, errors }) {
 		const { shardId, shardState } = input
 		const { organizationId, userId } = context.auth
 

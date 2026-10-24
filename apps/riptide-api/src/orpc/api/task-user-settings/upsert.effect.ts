@@ -5,16 +5,15 @@ import { mapPostgresErrorToResponse } from '../../../effects/services/postgres/e
 import { getTransactionId, requireTaskReadPermission } from '../../../effects/services/postgres/helpers'
 import { PostgresDb } from '../../../effects/services/postgres/postgres-db.service'
 import { Sentry } from '../../../instrument'
-import { effectOrpcBaseOrganizationRequired, requiresBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcBaseOrganizationRequired } from '../../effect-base'
 
 /**
  * Upsert per-user task settings.
  *
  * Authorization: User must have read permission on task (via ownership or ACL).
  */
-export const upsertTaskUserSettingsProcedure = effectOrpcBaseOrganizationRequired.taskUserSettings.upsert
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const upsertTaskUserSettingsProcedure = effectOrpcBaseOrganizationRequired.taskUserSettings.upsert.effect(
+	function* ({ input, context, errors }) {
 		const postgres = yield* PostgresDb
 		const { userId, organizationId } = context.auth
 		const {
@@ -97,4 +96,5 @@ export const upsertTaskUserSettingsProcedure = effectOrpcBaseOrganizationRequire
 		yield* Effect.logInfo('Task user settings upserted').pipe(Effect.annotateLogs({ taskId, userId }))
 
 		return result
-	})
+	},
+)

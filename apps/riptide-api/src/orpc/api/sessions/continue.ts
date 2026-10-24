@@ -12,7 +12,7 @@ import {
 	SessionAccessControl,
 } from '../../../lib/session-multiplayer-prompting-auth'
 import logger from '../../../logger'
-import { apiBaseOrgRequired, requiresBillingMiddleware } from '../../base'
+import { apiBaseOrgRequired } from '../../base'
 
 /**
  * Continue an existing session with a new user message
@@ -20,9 +20,8 @@ import { apiBaseOrgRequired, requiresBillingMiddleware } from '../../base'
  * Authorization: User must be session creator AND have edit access (via task ACL or session ownership if no task)
  * Precondition: Session must be in 'ready_for_input', 'interrupted', or 'failed' status
  */
-export const continueSessionProcedure = apiBaseOrgRequired.sessions.continue
-	.use(requiresBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
+export const continueSessionProcedure = apiBaseOrgRequired.sessions.continue.handler(
+	async ({ input, context, errors }) => {
 		const { sessionId, eventId, text, model, effort, fastMode, permissionsMode } = input
 		const { services } = context
 		const { db } = services
@@ -149,4 +148,5 @@ export const continueSessionProcedure = apiBaseOrgRequired.sessions.continue
 			logger.error(error, 'Failed to continue session')
 			throw errors.INTERNAL_SERVER_ERROR()
 		}
-	})
+	},
+)

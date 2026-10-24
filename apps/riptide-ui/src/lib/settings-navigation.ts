@@ -13,7 +13,7 @@ export type NavigateFn = ReturnType<typeof useNavigate>
  * Navigate to a settings section route, e.g. `/settings/general`.
  *
  * Every settings entry point (hotkey, footer gear, command palette, toasts,
- * banners, post-checkout redirect) routes through this helper so the active
+ * banners) routes through this helper so the active
  * section is encoded in the URL instead of imperative modal state. When no
  * section is provided it lands on {@link DEFAULT_SETTINGS_SECTION}, matching the
  * modal's old "open with no tab" behavior.

@@ -7,9 +7,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { HotkeyScopeBoundary } from '@/components/HotkeyScopeBoundary'
-import { getBillingCheckoutClient } from '@/domains/billing/checkout-client'
 import { HOTKEY_SCOPES } from '@/hooks/hotkeys/scopes'
-import { openExternal } from '@/lib/url-opener'
 import { useRiptideApi } from '@/orpc/client'
 
 interface InvitationDialogProps {
@@ -23,7 +21,6 @@ export function InvitationDialog({ open, defaultEmail, description, onOpenChange
 	const { queryClient: api, authScope } = useRiptideApi()
 	const cache = useQueryClient()
 	const [errorMessage, setErrorMessage] = useState<string | null>(null)
-	const [upgradeRequiredMessage, setUpgradeRequiredMessage] = useState<string | null>(null)
 	const scope = authScope
 	const listKeys = (['pending', 'archived'] as const).map((status) => {
 		const options = api.auth.admin.accessRequests.list.queryOptions({ input: { status } })
@@ -37,15 +34,6 @@ export function InvitationDialog({ open, defaultEmail, description, onOpenChange
 			cache.invalidateQueries({ queryKey: [...countOptions.queryKey, scope] }),
 		])
 
-	const upgrade = useMutation(
-		api.billing.startUpgrade.mutationOptions({
-			onSuccess: async (result) => openExternal(result.url),
-			onError: (error) => {
-				Sentry.captureException(error)
-				toast.error('Unable to start upgrade checkout')
-			},
-		}),
-	)
 	const create = useMutation(
 		api.auth.admin.invitations.create.mutationOptions({
 			onSuccess: async () => {
@@ -56,24 +44,19 @@ export function InvitationDialog({ open, defaultEmail, description, onOpenChange
 				}
 			},
 			onError: async (error) => {
-				if (isDefinedError(error) && error.code === 'UPGRADE_REQUIRED') {
-					setUpgradeRequiredMessage(error.data.message)
-					return
-				}
 				if (isDefinedError(error) && (error.code === 'ALREADY_INVITED' || error.code === 'ALREADY_A_MEMBER')) {
 					setErrorMessage(error.data.message)
 					await refreshQueue()
 					return
 				}
 				Sentry.captureException(error, { tags: { action: 'create_native_invitation' } })
-				setErrorMessage(error.message || 'Failed to send invitation')
+				setErrorMessage('Could not send invitation. Check the invitation list before retrying.')
 			},
 		}),
 	)
 
 	const submit = (input: CreateInvitationInput) => {
 		setErrorMessage(null)
-		setUpgradeRequiredMessage(null)
 		create.mutate(input)
 	}
 
@@ -96,14 +79,6 @@ export function InvitationDialog({ open, defaultEmail, description, onOpenChange
 						defaultEmail={defaultEmail}
 						isPending={create.isPending}
 						errorMessage={errorMessage}
-						upgradeRequiredMessage={upgradeRequiredMessage}
-						isUpgradePending={upgrade.isPending}
-						onUpgrade={() =>
-							upgrade.mutate({
-								checkoutAttemptId: crypto.randomUUID(),
-								client: getBillingCheckoutClient(),
-							})
-						}
 						onSubmit={submit}
 					/>
 				</DialogContent>

@@ -12,21 +12,10 @@ export interface InvitationFormProps {
 	defaultEmail?: string
 	isPending: boolean
 	errorMessage?: string | null
-	upgradeRequiredMessage?: string | null
-	isUpgradePending?: boolean
-	onUpgrade?: () => void
 	onSubmit: (input: CreateInvitationInput) => void
 }
 
-export function InvitationForm({
-	defaultEmail,
-	isPending,
-	errorMessage,
-	upgradeRequiredMessage,
-	isUpgradePending = false,
-	onUpgrade,
-	onSubmit,
-}: InvitationFormProps) {
+export function InvitationForm({ defaultEmail, isPending, errorMessage, onSubmit }: InvitationFormProps) {
 	const [email, setEmail] = useState(defaultEmail ?? '')
 	const [roleSlug, setRoleSlug] = useState<'admin' | 'member'>('member')
 	const [expiresInDays, setExpiresInDays] = useState(7)
@@ -47,13 +36,6 @@ export function InvitationForm({
 
 	return (
 		<form onSubmit={submit} className="space-y-4">
-			{upgradeRequiredMessage ? (
-				<div className="border border-border bg-muted/40 p-3 text-sm">
-					<p className="font-medium text-foreground">Pro upgrade required</p>
-					<p className="mt-1 text-muted-foreground">{upgradeRequiredMessage}</p>
-					{onUpgrade ? <Button type="button" variant="outline" className="mt-3" disabled={isUpgradePending} onClick={onUpgrade}>{isUpgradePending ? 'Opening Checkout...' : 'Upgrade to Pro'}</Button> : null}
-				</div>
-			) : null}
 			{errorMessage ? <p className="text-sm text-destructive" role="alert">{errorMessage}</p> : null}
 			<Field data-invalid={Boolean(validationErrors.email)}><FieldLabel htmlFor="invitation-email">Email</FieldLabel><Input id="invitation-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} aria-invalid={Boolean(validationErrors.email)} placeholder="user@example.com" autoComplete="email" />{validationErrors.email ? <FieldError>{validationErrors.email}</FieldError> : null}</Field>
 			<Field><FieldLabel htmlFor="invitation-role">Role</FieldLabel><Select onValueChange={(value) => setRoleSlug(value as 'admin' | 'member')} value={roleSlug}><SelectTrigger id="invitation-role"><SelectValue placeholder="Select a role" /></SelectTrigger><SelectContent><SelectItem value="member">Member</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select><FieldDescription>The role this user will have in the organization</FieldDescription></Field>

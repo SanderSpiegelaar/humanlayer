@@ -36,10 +36,10 @@ describe('handleDeepLinkUrl', () => {
 	test('forwards normalized nav hrefs to TanStack Router', () => {
 		const navigate = vi.fn()
 
-		handleDeepLinkUrl('riptide-local://nav/settings/billing?billing=starter_to_pro_finalized', navigate as never)
+		handleDeepLinkUrl('riptide-local://nav/settings/general?minimal_ui=true', navigate as never)
 
 		expect(navigate).toHaveBeenCalledWith({
-			href: '/settings/billing?billing=starter_to_pro_finalized',
+			href: '/settings/general?minimal_ui=true',
 		})
 	})
 

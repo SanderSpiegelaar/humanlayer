@@ -115,7 +115,7 @@ const TokenUseStageSplitSchema = z.object({
  *
  * `contributorCount` was a bare count precisely so no per-person total could
  * be reconstructed. Splitting a task's bar by person needs the totals, so the
- * ids now travel — but only under the same entitlement and audience gates that
+ * ids now travel — but only under the same audience gate that
  * already serve `userStageSpend` and `userModeSpend`, which have published
  * per-person spend to this exact audience since they shipped. The finer grain
  * is new; the class of data reaching this caller is not. An org that opens the

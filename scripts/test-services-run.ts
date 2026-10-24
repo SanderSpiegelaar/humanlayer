@@ -9,7 +9,6 @@ const child = Bun.spawn(
 		'turbo',
 		'run',
 		'test',
-		'--filter=@humanlayer/billing',
 		'--filter=@humanlayer/riptide-api',
 		'--filter=@humanlayer/test-fixtures',
 		'--filter=@humanlayer/riptide-electric-proxy',

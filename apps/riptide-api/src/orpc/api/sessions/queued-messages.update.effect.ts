@@ -12,12 +12,11 @@ import {
 	hasRequiredSessionAccess,
 	SessionAccessControl,
 } from '../../../lib/session-multiplayer-prompting-auth'
-import { effectOrpcBaseOrganizationRequired, requiresBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcBaseOrganizationRequired } from '../../effect-base'
 import { ORPCForbiddenError, ORPCNotFoundError, ORPCQueuedMessageUpdateFailedError } from '../../effect-errors'
 
-export const updateQueuedMessageEffectProcedure = effectOrpcBaseOrganizationRequired.sessions.queuedMessages.update
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const updateQueuedMessageEffectProcedure =
+	effectOrpcBaseOrganizationRequired.sessions.queuedMessages.update.effect(function* ({ input, context, errors }) {
 		const postgres = yield* PostgresDb
 		const nowMillis = yield* Clock.currentTimeMillis
 		const { organizationId, userId } = context.auth

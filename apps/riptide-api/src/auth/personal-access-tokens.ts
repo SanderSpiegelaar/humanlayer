@@ -118,7 +118,6 @@ export const authenticatePersonalAccessToken = Effect.fn('auth.authenticate_pers
 				role: 'member',
 				roles: ['member'],
 				permissions: [],
-				entitlements: [],
 			}
 		}),
 )

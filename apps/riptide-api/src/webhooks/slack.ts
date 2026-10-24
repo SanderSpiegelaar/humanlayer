@@ -95,8 +95,7 @@ function statusForVerificationFailure(cause: Cause.Cause<unknown>): { status: 40
  *
  * Slack sends a signed `application/x-www-form-urlencoded` POST for every interactive
  * component click (even URL-only buttons). This route verifies the request came from
- * Slack, then ACKs `200` within Slack's 3-second window. It follows the verify-before-ACK
- * webhook shape (`webhooks/stripe.ts`) but bridges verification through Effect and forks
+ * Slack, then ACKs `200` within Slack's 3-second window. It verifies through Effect and forks
  * the handler so the ACK is immune to processing outcome (Option C):
  *
  *   1. Read the raw body *before* any parse (`await c.req.raw.text()`), so the signature is

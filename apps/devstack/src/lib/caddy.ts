@@ -30,7 +30,7 @@ const ROUTE_PORTS = {
 	docs: 'docs',
 	adminApi: 'adminApi',
 	adminUi: 'adminUi',
-	s3: 'minioApi',
+	s3: 'rustfsApi',
 } as const
 
 export function caddyConfigPath(registryPath: string): string {

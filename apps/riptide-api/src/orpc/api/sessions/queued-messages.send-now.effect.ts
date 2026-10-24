@@ -16,12 +16,11 @@ import {
 	SessionAccessControl,
 } from '../../../lib/session-multiplayer-prompting-auth'
 import { buildAttributedPrompt } from '../../../lib/session-prompt-attribution'
-import { effectOrpcBaseOrganizationRequired, requiresBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcBaseOrganizationRequired } from '../../effect-base'
 import { ORPCForbiddenError, ORPCNotFoundError, ORPCQueuedMessageSendFailedError } from '../../effect-errors'
 
-export const sendNowQueuedMessageEffectProcedure = effectOrpcBaseOrganizationRequired.sessions.queuedMessages.sendNow
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const sendNowQueuedMessageEffectProcedure =
+	effectOrpcBaseOrganizationRequired.sessions.queuedMessages.sendNow.effect(function* ({ input, context, errors }) {
 		const postgres = yield* PostgresDb
 		const nowMillis = yield* Clock.currentTimeMillis
 		const { userId, organizationId } = context.auth

@@ -9,7 +9,6 @@ import { useLocalStorage } from '@uidotdev/usehooks'
 import { useAuth } from '@workos-inc/authkit-react'
 
 import { AppSidebar } from '@/components/AppSidebar'
-import { BillingBannerRail } from '@/components/BillingBannerRail'
 import { DynamicDocumentTitle } from '@/components/DynamicDocumentTitle'
 import { FocusSourceHandler } from '@/components/FocusSourceHandler'
 import { Footer } from '@/components/Footer'
@@ -86,7 +85,6 @@ function AppFrame({ pathname }: { pathname: string }) {
 						<AppSidebar />
 						<div className="flex flex-col grow max-w-full min-w-0 overflow-x-clip">
 							<Header />
-							<BillingBannerRail />
 							<main className="flex-1 overflow-auto">
 								<Outlet />
 							</main>

@@ -15,19 +15,6 @@ export const contractBuilder = oc.errors({
 	FORBIDDEN: {
 		status: StatusCodes.FORBIDDEN,
 	},
-	BILLING_REQUIRED: {
-		status: StatusCodes.PAYMENT_REQUIRED,
-	},
-	UPGRADE_REQUIRED: {
-		status: StatusCodes.PAYMENT_REQUIRED,
-		data: z.object({
-			message: z.string(),
-			currentActiveSeats: z.number().int().nonnegative(),
-			pendingInvitations: z.number().int().nonnegative(),
-			freeCapacity: z.number().int().nonnegative(),
-			actionLabel: z.string().optional(),
-		}),
-	},
 	SYNC_SETTINGS_ORG_POLICY_VIOLATION: {
 		status: StatusCodes.FORBIDDEN,
 		data: z.object({

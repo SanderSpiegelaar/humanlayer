@@ -2,7 +2,6 @@ import { ORPCError } from '@orpc/server'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
-import { syncOrganizationSeatQuantity } from '../../../../lib/seat-sync'
 import { logger } from '../../../../logger'
 import { apiBaseForOrganizationAdmin } from '../../../base'
 
@@ -16,7 +15,7 @@ export const adminUpdateUserRoleProcedure = apiBaseForOrganizationAdmin.auth.adm
 	async ({ context, input, errors }) => {
 		const {
 			auth,
-			services: { db, stripe, workos },
+			services: { workos },
 		} = context
 
 		// Prevent self-demotion
@@ -47,10 +46,6 @@ export const adminUpdateUserRoleProcedure = apiBaseForOrganizationAdmin.auth.adm
 			await workos.userManagement.updateOrganizationMembership(membership.id, {
 				roleSlug: input.roleSlug,
 			})
-			await syncOrganizationSeatQuantity(
-				{ organizationId: auth.organizationId, reason: 'first_party_membership_mutation' },
-				{ workosService: workos, stripeService: stripe, db },
-			)
 
 			return { success: true }
 		} catch (error: unknown) {

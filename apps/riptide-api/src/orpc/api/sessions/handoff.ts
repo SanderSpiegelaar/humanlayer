@@ -13,7 +13,7 @@ import { checkSessionWritePermission } from '../../../db/task-auth'
 import { tryEnsureSessionStreamHydrated } from '../../../effects/services/durable-streams/streams'
 import { renderConversationTranscript } from '../../../lib/render-conversation-transcript'
 import logger from '../../../logger'
-import { type ApiContext, apiBaseOrgRequired, requiresBillingMiddleware } from '../../base'
+import { type ApiContext, apiBaseOrgRequired } from '../../base'
 
 type SessionRow = InferSelectModel<typeof sessions>
 type DbTransaction = Parameters<Parameters<ApiContext['services']['db']['transaction']>[0]>[0]
@@ -204,9 +204,8 @@ async function runHandoffTransaction({
 	return { transactionId: txResult.txid, session: txResult.session }
 }
 
-export const handoffSessionProcedure = apiBaseOrgRequired.sessions.handoff
-	.use(requiresBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
+export const handoffSessionProcedure = apiBaseOrgRequired.sessions.handoff.handler(
+	async ({ input, context, errors }) => {
 		try {
 			return await runHandoffTransaction({ input, context, errors })
 		} catch (error: unknown) {
@@ -214,4 +213,5 @@ export const handoffSessionProcedure = apiBaseOrgRequired.sessions.handoff
 			logger.error(error, 'Failed to hand off session')
 			throw errors.INTERNAL_SERVER_ERROR({})
 		}
-	})
+	},
+)

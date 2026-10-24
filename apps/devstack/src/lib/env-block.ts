@@ -96,7 +96,7 @@ export type StackEnvProjection = {
 		syncRoute: string
 	}
 	rivet?: { enginePort: number; servicesPort: number; engineVolume: string; durableStreamsOrigin: string }
-	minio?: {
+	rustfs?: {
 		apiPort: number
 		consolePort: number
 		volume: string
@@ -182,15 +182,15 @@ export function renderStackEnvLines(
 		`DEVSTACK_DURABLE_STREAMS_PORT=${stack.rivet?.servicesPort ?? stack.ports.rivetServices}`,
 		`DEVSTACK_DURABLE_STREAMS_VOLUME=${stack.rivet?.engineVolume ?? `${stack.composeProject}-durable-streams`}`,
 		`DURABLE_STREAMS_ORIGIN=${stack.rivet?.durableStreamsOrigin ?? `http://127.0.0.1:${stack.ports.rivetServices}`}`,
-		`DEVSTACK_MINIO_API_PORT=${stack.minio?.apiPort ?? stack.ports.minioApi}`,
-		`DEVSTACK_MINIO_CONSOLE_PORT=${stack.minio?.consolePort ?? stack.ports.minioConsole}`,
-		`DEVSTACK_MINIO_VOLUME=${stack.minio?.volume ?? `${stack.composeProject}-minio`}`,
+		`DEVSTACK_RUSTFS_API_PORT=${stack.rustfs?.apiPort ?? stack.ports.rustfsApi}`,
+		`DEVSTACK_RUSTFS_CONSOLE_PORT=${stack.rustfs?.consolePort ?? stack.ports.rustfsConsole}`,
+		`DEVSTACK_RUSTFS_VOLUME=${stack.rustfs?.volume ?? `${stack.composeProject}-rustfs`}`,
 		// The Caddy https route, not the direct http port: WebKit (the native app's
 		// webview) blocks plain-http presigned S3 PUTs from an https page as mixed content.
-		`S3_ARTIFACTS_ENDPOINT=${stack.routes?.s3 ?? stack.minio?.endpoint ?? `http://127.0.0.1:${stack.ports.minioApi}`}`,
-		`S3_ARTIFACTS_BUCKET=${stack.minio?.bucket ?? 'riptide-artifacts'}`,
-		`S3_ACCESS_KEY_ID=${stack.minio?.accessKeyId ?? 'minioadmin'}`,
-		`S3_SECRET_ACCESS_KEY=${stack.minio?.secretAccessKey ?? 'minioadmin'}`,
+		`S3_ARTIFACTS_ENDPOINT=${stack.routes?.s3 ?? stack.rustfs?.endpoint ?? `http://127.0.0.1:${stack.ports.rustfsApi}`}`,
+		`S3_ARTIFACTS_BUCKET=${stack.rustfs?.bucket ?? 'riptide-artifacts'}`,
+		`S3_ACCESS_KEY_ID=${stack.rustfs?.accessKeyId ?? 'rustfsadmin'}`,
+		`S3_SECRET_ACCESS_KEY=${stack.rustfs?.secretAccessKey ?? 'rustfsadmin'}`,
 	)
 	if (organizationId) lines.push(`RIPTIDE_DAEMON_ORGANIZATION_ID=${organizationId}`)
 	if (stack.redis) {
@@ -234,8 +234,8 @@ export function renderStackEnvLines(
 						'electricProxy',
 						'rivetEngine',
 						'rivetServices',
-						'minioApi',
-						'minioConsole',
+						'rustfsApi',
+						'rustfsConsole',
 						'tanstackDevtools',
 					].includes(name),
 			)

@@ -279,8 +279,6 @@ function launchFailure(error: unknown): string | null {
 	const known = getTaskConflictMessage(error) ?? getTicketLookupError(error)?.message
 	if (known) return known
 	const code = error instanceof ORPCError ? error.code : null
-	if (code === 'BILLING_REQUIRED')
-		return 'The organization needs a billing plan. An admin can add one in Settings → Billing.'
 	if (code === 'FORBIDDEN') return "Your account can't start tasks here."
 	return null
 }

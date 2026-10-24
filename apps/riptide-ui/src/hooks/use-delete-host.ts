@@ -16,9 +16,6 @@ export function getDeleteHostErrorDescription(error: unknown): string {
 			return 'Select an organization before retrying.'
 		case 'FORBIDDEN':
 			return "You don't have permission to delete this host. Only its owner can delete it."
-		case 'BILLING_REQUIRED':
-		case 'UPGRADE_REQUIRED':
-			return 'Billing must be updated before you can delete a host. Ask an organization admin.'
 		default:
 			return 'Deletion could not be confirmed. Check the host list before retrying.'
 	}

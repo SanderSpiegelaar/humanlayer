@@ -15,13 +15,12 @@ import { mapPostgresErrorToResponse } from '../../effects/services/postgres/erro
 import type { PostgresDbError } from '../../effects/services/postgres/postgres-db.errors'
 import { PostgresDb } from '../../effects/services/postgres/postgres-db.service'
 import { Sentry } from '../../instrument'
-import { effectOrpcBaseOrganizationRequired, requiresBillingEffectMiddleware } from '../effect-base'
+import { effectOrpcBaseOrganizationRequired } from '../effect-base'
 
 const AUTOMATION_PREPARATION_LOCK_WAIT_MS = 5_000
 
-export const automationRunPrepareProcedure = effectOrpcBaseOrganizationRequired.automation.run.prepare
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const automationRunPrepareProcedure = effectOrpcBaseOrganizationRequired.automation.run.prepare.effect(
+	function* ({ input, context, errors }) {
 		if (!isEffortSupported(input.codingAgent, input.provider, input.model, input.effort)) {
 			return yield* Effect.fail(
 				errors.BAD_REQUEST({ data: { message: 'The selected effort is not supported by this model' } }),
@@ -201,4 +200,5 @@ export const automationRunPrepareProcedure = effectOrpcBaseOrganizationRequired.
 			hostId: input.hostId,
 			sessionId: prepared.sessionId,
 		}
-	})
+	},
+)

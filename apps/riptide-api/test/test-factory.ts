@@ -22,22 +22,18 @@ import { AccessRequestService } from '../src/effects/services/access-request/acc
 import type { IJiraService } from '../src/lib/jira-service'
 import type { ILinearService } from '../src/lib/linear-service'
 import type { IS3Service } from '../src/lib/s3-service'
-import type { IStripeService } from '../src/lib/stripe-service'
 import type { WorkosSdkAdapter } from '../src/lib/workos-service'
 import { apiHandler, daemonApiHandler } from '../src/orpc'
 import type { ApiContext, DaemonAuthContext, DaemonContext, Services } from '../src/orpc/base'
 import { type ResendWebhookDeps, registerResendWebhookRoute } from '../src/webhooks/resend'
 import { registerSlackInteractionsRoute } from '../src/webhooks/slack'
-import { registerStripeWebhookRoute } from '../src/webhooks/stripe'
 import { registerWorkosWebhookRoute } from '../src/webhooks/workos'
-import { billingKvLayerFromTestService, TestBillingKvService } from './fixtures/billing-kv-runtime'
 import { createMockServices } from './mocks/auth-context.mock'
-import { createRuntimeWithTestPostgresLayer, type TestRuntimeOptions } from './utils/effect-procedure-test-runtime'
+import { createRuntimeWithTestPostgresLayer } from './utils/effect-procedure-test-runtime'
 
 export type { AuthContextOptionalOrg } from '../src/auth/jwt-validator'
 // Re-exports for test fixtures
 export type { WorkosSdkAdapter } from '../src/lib/workos-service'
-export { createMockStripeService } from './mocks/stripe-service.mock'
 
 /** No-op S3 service for tests that don't need real presigned URLs */
 const noopS3: IS3Service = {
@@ -137,14 +133,8 @@ export type TestAppConfig = {
 	jira?: IJiraService
 	/** Linear service — defaults to no-op mock */
 	linear?: ILinearService
-	/** Stripe service for billing, provisioning, and seat sync routes */
-	stripe: IStripeService
-	/** Test-only billing KV store used to build the Effect runtime. */
-	kv?: TestBillingKvService
 	/** App Effect runtime seam — defaults to the canonical test runtime mock */
 	effectRuntime?: AppRuntime
-	billingAccess?: TestRuntimeOptions['billingAccess']
-	entitlements?: TestRuntimeOptions['entitlements']
 	/** Resend webhook dependencies — defaults to a no-op JSON verifier */
 	resendWebhook?: ResendWebhookDeps
 	/**
@@ -161,17 +151,7 @@ export type TestAppConfig = {
 
 export type TestServicesConfig = Pick<
 	TestAppConfig,
-	| 'db'
-	| 'dbReadReplica'
-	| 'workos'
-	| 's3'
-	| 'jira'
-	| 'linear'
-	| 'stripe'
-	| 'kv'
-	| 'billingAccess'
-	| 'entitlements'
-	| 'effectRuntime'
+	'db' | 'dbReadReplica' | 'workos' | 's3' | 'jira' | 'linear' | 'effectRuntime'
 >
 
 /**
@@ -179,8 +159,8 @@ export type TestServicesConfig = Pick<
  *
  * Layers on top of `createMockServices` (the single canonical default list) and
  * overrides only the services that need a bootable no-op rather than a
- * throw-by-default mock — `s3`, `jira`, `linear`, `kv` — plus the caller-supplied
- * `workos`/`stripe`/`db`. A new service is added in one place (`createMockServices`)
+ * throw-by-default mock — `s3`, `jira`, `linear` — plus the caller-supplied
+ * `workos`/`db`. A new service is added in one place (`createMockServices`)
  * and only needs an override here if its throw-by-default mock would break app boot.
  *
  * The access-request procedure group + webhook backfill run through `AccessRequestService`
@@ -190,14 +170,7 @@ export type TestServicesConfig = Pick<
  */
 export function createTestServices(config: TestServicesConfig): Services {
 	const dbReadReplica = config.dbReadReplica ?? config.db
-	const kv = config.kv ?? new TestBillingKvService()
-	const effectRuntime =
-		config.effectRuntime ??
-		createRuntimeWithTestPostgresLayer(config.db, {
-			billingKv: billingKvLayerFromTestService(kv),
-			billingAccess: config.billingAccess,
-			entitlements: config.entitlements,
-		})
+	const effectRuntime = config.effectRuntime ?? createRuntimeWithTestPostgresLayer(config.db)
 
 	return createMockServices({
 		workos: config.workos,
@@ -206,7 +179,6 @@ export function createTestServices(config: TestServicesConfig): Services {
 		s3: config.s3 ?? noopS3,
 		jira: config.jira ?? noopJira,
 		linear: config.linear ?? noopLinear,
-		stripe: config.stripe,
 		// Only override when supplied so the canonical default test runtime from
 		// `createMockServices` is preserved otherwise.
 		effectRuntime,
@@ -264,10 +236,8 @@ export function createApp(config: TestAppConfig): Hono {
 
 	// Enable CORS (same as production)
 	app.use('*', cors())
-	registerStripeWebhookRoute(app, { appRuntime: services.effectRuntime })
 	registerWorkosWebhookRoute(app, {
 		workosService: services.workos,
-		stripeService: services.stripe,
 		db: services.db,
 		backfillAccessRequestRequesterUserId,
 	})

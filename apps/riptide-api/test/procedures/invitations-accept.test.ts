@@ -1,60 +1,10 @@
-import { organizations } from '@humanlayer/db/tables/organizations'
 import { call, isDefinedError } from '@orpc/server'
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { acceptUserInvitationProcedure } from '../../src/orpc/api/auth/user/invitations-accept'
-import { createMockApiContextNoOrg, createMockStripeService, StatefulMockWorkosService } from '../mocks'
-import { requireExternalTestServices } from '../utils/external-test-services'
-import { createTestDb } from '../utils/test-db'
-
-await requireExternalTestServices()
+import { createMockApiContextNoOrg, StatefulMockWorkosService } from '../mocks'
 
 describe('api/auth/user/invitations/accept', () => {
-	let cleanupTestDb: (() => Promise<void>) | undefined
-	let _db: PostgresJsDatabase
-
-	beforeAll(async () => {
-		const testDb = await createTestDb('invitations_accept')
-		cleanupTestDb = testDb.cleanup
-		_db = testDb.db
-	}, 30000)
-
-	afterAll(async () => {
-		await cleanupTestDb?.()
-	}, 30000)
-
-	async function createSeatSyncFixture(workosOrganizationId: string) {
-		const stripeCustomerId = `cus_${workosOrganizationId.replace(/[^a-zA-Z0-9]/g, '_')}`
-		await _db.insert(organizations).values({
-			name: `Invitation Accept Org ${workosOrganizationId}`,
-			workos_organization_id: workosOrganizationId,
-			stripe_customer_id: stripeCustomerId,
-		})
-
-		const countActiveOrganizationMemberships = vi.fn(async () => 2)
-		const findCurrentSubscriptionItemForCustomer = vi.fn(async () => ({
-			subscriptionId: 'sub_invitation_accept',
-			subscriptionItemId: 'si_invitation_accept',
-			priceId: 'price_pro_test',
-			quantity: 1,
-		}))
-		const updateSubscriptionItemQuantity = vi.fn(async () => ({
-			subscriptionItemId: 'si_invitation_accept',
-			quantity: 2,
-		}))
-
-		return {
-			countActiveOrganizationMemberships,
-			findCurrentSubscriptionItemForCustomer,
-			updateSubscriptionItemQuantity,
-			stripe: createMockStripeService({
-				findCurrentSubscriptionItemForCustomer,
-				updateSubscriptionItemQuantity,
-			}),
-		}
-	}
-
 	function buildNoOrgContext(workos: StatefulMockWorkosService, userId: string) {
 		return createMockApiContextNoOrg({
 			auth: { userId },
@@ -75,17 +25,12 @@ describe('api/auth/user/invitations/accept', () => {
 			state: 'pending',
 			token: 'valid_token_123',
 		})
-		const seatSync = await createSeatSyncFixture(orgId)
-		workos.countActiveOrganizationMemberships = seatSync.countActiveOrganizationMemberships
 
 		const result = await call(
 			acceptUserInvitationProcedure,
 			{ invitationToken: 'valid_token_123' },
 			{
-				context: createMockApiContextNoOrg({
-					auth: { userId },
-					services: { workos, db: _db, dbReadReplica: _db, stripe: seatSync.stripe },
-				}),
+				context: buildNoOrgContext(workos, userId),
 			},
 		)
 
@@ -94,12 +39,6 @@ describe('api/auth/user/invitations/accept', () => {
 		// Verify invitation was marked as accepted
 		const updatedInvitation = workos._invitations.get(invitation.id)
 		expect(updatedInvitation?.state).toBe('accepted')
-		expect(seatSync.countActiveOrganizationMemberships).toHaveBeenCalledWith(orgId)
-		expect(seatSync.updateSubscriptionItemQuantity).toHaveBeenCalledWith({
-			subscriptionItemId: 'si_invitation_accept',
-			quantity: 2,
-			prorationBehavior: 'create_prorations',
-		})
 	})
 
 	test('Returns organizationId on success', async () => {
@@ -115,17 +54,12 @@ describe('api/auth/user/invitations/accept', () => {
 			state: 'pending',
 			token: 'token_abc',
 		})
-		const seatSync = await createSeatSyncFixture(expectedOrgId)
-		workos.countActiveOrganizationMemberships = seatSync.countActiveOrganizationMemberships
 
 		const result = await call(
 			acceptUserInvitationProcedure,
 			{ invitationToken: 'token_abc' },
 			{
-				context: createMockApiContextNoOrg({
-					auth: { userId },
-					services: { workos, db: _db, dbReadReplica: _db, stripe: seatSync.stripe },
-				}),
+				context: buildNoOrgContext(workos, userId),
 			},
 		)
 
@@ -134,7 +68,6 @@ describe('api/auth/user/invitations/accept', () => {
 		// Verify invitation state transition
 		const updatedInvitation = workos._invitations.get(invitation.id)
 		expect(updatedInvitation?.state).toBe('accepted')
-		expect(seatSync.countActiveOrganizationMemberships).toHaveBeenCalledWith(expectedOrgId)
 	})
 
 	test('Rejects revoked invitation with INVITATION_REVOKED error', async () => {

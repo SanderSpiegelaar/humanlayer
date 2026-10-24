@@ -10,11 +10,8 @@ import { Effect } from 'effect'
 
 import type { AuthContext, AuthContextOptionalOrg } from '../auth/jwt-validator'
 import { appRuntime } from '../effects/app-runtime'
-import { decideBillingAccess } from '../effects/services/billing/billing-access.service'
-import { hasFeature } from '../effects/services/billing/entitlements.service'
 import { sharesMetricsWithMembers } from '../effects/services/metrics/metrics-audience'
 import { Sentry } from '../instrument'
-import { isBillingEnforcementEnabled } from '../lib/environment'
 import { type DaemonAuthContext, isAuthContextWithOrg, isOrganizationAdmin, type Services } from './base'
 
 const runLog = (effect: Effect.Effect<void>) => Effect.runSync(effect)
@@ -104,15 +101,9 @@ function captureUnexpectedEffectOrpcError(error: unknown, path?: readonly string
 	})
 }
 
-/**
- * NOTE: the servies ARE available but we do NOT want them - we want to encourage
- * using dependency injection with Effect layers into the runtime
- * so our implementer mutes the context.services key:
- */
-
 export type EffectApiContext = {
 	auth: AuthContextOptionalOrg | null
-	// services: Services // muted
+	services: Services
 	headers?: Headers | Record<string, string | undefined>
 	requestIp?: string
 }
@@ -236,102 +227,19 @@ export const effectOrpcBaseForOrganizationAdmin = effectImplementer
 		}
 	})
 
-/**
- * Effect-aware oRPC base for the Advanced Metrics routes. Mirrors the classic
- * {@link apiBaseForAdvancedMetrics}: the billing entitlement, so the per-member cost aggregates
- * stay unreachable — even to an org admin hitting the RPC directly — unless the org pays for
- * Riptide, and then the audience gate, so a non-admin member reaches them only where an admin has
- * opened the page to the whole org.
- *
- * Native middleware, not an Effect one: the implementer exposes the Effect `.use(function* …)`
- * overload only on a contract leaf, so a router-level base can take native middleware only.
- */
-const advancedMetricsRequired = effectImplementer.middleware<{ auth: AuthContext; services: Services }, unknown>(
+export const effectOrpcBaseForAdvancedMetrics = effectOrpcBaseOrganizationRequired.use(
 	async ({ context, next, errors }) => {
-		const metricsContext = context as { auth: AuthContext; services: Services }
-		const entitled = await hasFeature(
-			metricsContext.services.effectRuntime,
-			metricsContext.auth.organizationId,
-			'advancedMetrics',
-		)
-		if (!entitled) {
-			throw errors.FORBIDDEN()
-		}
-		const shares = await sharesMetricsWithMembers(metricsContext.services.effectRuntime, {
-			organizationId: metricsContext.auth.organizationId,
-			isAdmin: isOrganizationAdmin(metricsContext.auth),
+		const shares = await sharesMetricsWithMembers(context.services.effectRuntime, {
+			organizationId: context.auth.organizationId,
+			isAdmin: isOrganizationAdmin(context.auth),
 		})
 		if (!shares) {
 			throw errors.FORBIDDEN()
 		}
-		return next({ context: metricsContext })
+		return next({ context })
 	},
 )
 
-export const effectOrpcBaseForAdvancedMetrics = effectOrpcBaseOrganizationRequired.use(advancedMetricsRequired)
-
-/**
- * Middleware on the effect implementer for a procedure whick requires billing
- */
-export const requiresBillingEffectMiddleware = effectImplementer.middleware<
-	{ auth: AuthContext; services: Services },
-	unknown
->(async ({ context, next, errors, path }) => {
-	const billingContext = context as { auth: AuthContext; services: Services }
-	if (!isBillingEnforcementEnabled()) {
-		return next({ context: billingContext })
-	}
-
-	const procedureName = path.join('.')
-	try {
-		const decision = await billingContext.services.effectRuntime.runPromise(
-			decideBillingAccess({ organizationId: billingContext.auth.organizationId, operation: procedureName }),
-		)
-
-		if (decision === 'fail_open') {
-			runLog(
-				Effect.logWarning('Billing enforcement failed open for billing-required operation').pipe(
-					Effect.annotateLogs({ procedureName }),
-				),
-			)
-			Sentry.captureMessage('Billing enforcement failed open for billing-required operation', {
-				level: 'warning',
-				tags: { error_type: 'billing_enforcement_fail_open', procedure: procedureName },
-			})
-			return next({ context: billingContext })
-		}
-
-		if (decision === 'blocked') {
-			runLog(
-				Effect.logInfo('Billing enforcement blocked billing-required operation').pipe(
-					Effect.annotateLogs({ procedureName }),
-				),
-			)
-			throw errors.BILLING_REQUIRED()
-		}
-
-		return next({ context: billingContext })
-	} catch (error) {
-		if (error instanceof ORPCError) throw error
-		runLog(
-			Effect.logError('Billing middleware failed unexpectedly', error).pipe(
-				Effect.annotateLogs({ procedureName }),
-			),
-		)
-		Sentry.captureException(error, {
-			tags: { error_type: 'billing_middleware_failure', procedure: procedureName },
-		})
-		throw errors.SERVICE_UNAVAILABLE()
-	}
-})
-
-/**
- * Effect oRPC context for daemon-authenticated routes.
- *
- * Like {@link EffectApiContext}, the classic `services` bag is intentionally muted so
- * daemon Effect procedures obtain their dependencies from the shared `appRuntime`
- * layers. The billing middleware below reads the request's `services.effectRuntime`.
- */
 export type EffectDaemonContext = {
 	auth: DaemonAuthContext | null
 	// services: Services // muted
@@ -367,64 +275,3 @@ export const effectOrpcDaemonBase = effectDaemonImplementer
 			throw error
 		}
 	})
-
-/**
- * Billing guard for daemon-authenticated Effect routes.
- *
- * Reads organizationId from context.auth (daemon token claims). Daemon tokens are
- * long-lived, so billing is evaluated on every billing-gated request. This mirrors the
- * classic `requiresDaemonBillingMiddleware` exactly, including the fail-open behavior
- * when the billing service is missing, so converting a daemon route to Effect does not
- * change billing enforcement.
- */
-export const requiresDaemonBillingEffectMiddleware = effectDaemonImplementer.middleware<
-	{ auth: DaemonAuthContext; services: Services },
-	unknown
->(async ({ context, next, errors, path }) => {
-	const daemonContext = context as { auth: DaemonAuthContext; services: Services }
-	if (!isBillingEnforcementEnabled()) {
-		return next({ context: daemonContext })
-	}
-
-	const procedureName = path.join('.')
-	try {
-		const decision = await daemonContext.services.effectRuntime.runPromise(
-			decideBillingAccess({ organizationId: daemonContext.auth.organizationId, operation: procedureName }),
-		)
-
-		if (decision === 'fail_open') {
-			runLog(
-				Effect.logWarning('Billing enforcement failed open for daemon billing-required operation').pipe(
-					Effect.annotateLogs({ procedureName }),
-				),
-			)
-			Sentry.captureMessage('Billing enforcement failed open for daemon billing-required operation', {
-				level: 'warning',
-				tags: { error_type: 'billing_enforcement_fail_open', procedure: procedureName },
-			})
-			return next({ context: daemonContext })
-		}
-
-		if (decision === 'blocked') {
-			runLog(
-				Effect.logInfo('Billing enforcement blocked daemon billing-required operation').pipe(
-					Effect.annotateLogs({ procedureName }),
-				),
-			)
-			throw errors.BILLING_REQUIRED()
-		}
-
-		return next({ context: daemonContext })
-	} catch (error) {
-		if (error instanceof ORPCError) throw error
-		runLog(
-			Effect.logError('Daemon billing middleware failed unexpectedly', error).pipe(
-				Effect.annotateLogs({ procedureName }),
-			),
-		)
-		Sentry.captureException(error, {
-			tags: { error_type: 'billing_middleware_failure', procedure: procedureName },
-		})
-		throw errors.SERVICE_UNAVAILABLE()
-	}
-})

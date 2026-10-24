@@ -143,10 +143,6 @@ export function OrganizationCreateForm() {
 					rows={3}
 				/>
 				<p className="text-xs text-muted-foreground">Separate emails with commas, spaces, or new lines</p>
-				<p className="text-xs text-muted-foreground">
-					Starter is free while your team has three or fewer active members. You can invite up to two
-					teammates now; larger teams can upgrade after setup.
-				</p>
 			</Field>
 
 			<Separator />

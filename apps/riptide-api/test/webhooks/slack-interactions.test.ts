@@ -6,7 +6,7 @@ import type { AppRuntime } from '../../src/effects/app-runtime'
 import { computeSlackSignature } from '../../src/effects/services/slack/slack.interactions'
 import { SlackService, SlackServiceLiveBase } from '../../src/effects/services/slack/slack.service'
 import type { SlackInteractionPayload } from '../../src/effects/services/slack/slack.types'
-import { createMockStripeService, createMockWorkosService } from '../mocks'
+import { createMockWorkosService } from '../mocks'
 import { createApp } from '../test-factory'
 import { createRuntimeWithTestPostgresLayer } from '../utils/effect-procedure-test-runtime'
 
@@ -56,7 +56,6 @@ function makeSlackApp(slack: Layer.Layer<SlackService>) {
 	const app = createApp({
 		db: {} as any,
 		workos: createMockWorkosService(),
-		stripe: createMockStripeService(),
 		effectRuntime,
 	})
 	return app
@@ -197,9 +196,6 @@ describe('POST /webhooks/slack/interactions', () => {
 		expect(await response.json()).toEqual({ error: 'invalid_request' })
 	})
 
-	// (B) Raw-body regression: sign the exact bytes, deliver a semantically-equal but
-	// re-serialized body → 401. Catches any parse-before-verify (mirrors
-	// stripe-webhook.test.ts:150-167).
 	test('returns 401 when the signed body is reparsed before delivery', async () => {
 		const app = makeSlackApp(realSlackLayer)
 		const payloadJson = JSON.stringify({

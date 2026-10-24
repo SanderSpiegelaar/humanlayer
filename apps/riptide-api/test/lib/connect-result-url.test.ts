@@ -37,8 +37,6 @@ describe('buildConnectResultUrl', () => {
 	test.each(matrix)('$provider / $client / $status', ({ provider, client, status }) => {
 		const url = new URL(buildConnectResultUrl({ provider, client, status }))
 
-		// Every client resolves to CLOUD_ORIGIN — the deliberate divergence from billing,
-		// which splits `native` off onto APP_ORIGIN.
 		expect(url.origin).toBe('https://cloud.example.test')
 		expect(url.pathname).toBe(`/connect/${provider}`)
 		expect(url.searchParams.get('status')).toBe(status)

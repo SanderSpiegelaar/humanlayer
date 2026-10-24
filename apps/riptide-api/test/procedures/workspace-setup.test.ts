@@ -20,6 +20,7 @@ import { retryWorkspaceSetupStepProcedure as liveRetryWorkspaceSetupStepProcedur
 import { skipWorkspaceSetupStepProcedure as liveSkipWorkspaceSetupStepProcedure } from '../../src/orpc/api/workspace-setup/skip-step'
 import { updateWorkspaceSetupRepositoryDirectoryProcedure as liveUpdateWorkspaceSetupRepositoryDirectoryProcedure } from '../../src/orpc/api/workspace-setup/update-repository-directory'
 import { updateDaemonWorkspaceSetupProcedure as liveUpdateDaemonWorkspaceSetupProcedure } from '../../src/orpc/daemon/workspace-setup/update'
+import { createMockServices } from '../mocks'
 import { bindProcedureToRuntime, createRuntimeWithTestPostgresLayer } from '../utils/effect-procedure-test-runtime'
 import { requireExternalTestServices } from '../utils/external-test-services'
 import { createTestDb } from '../utils/test-db'
@@ -106,9 +107,9 @@ describe('workspace setup procedures', () => {
 			role: '',
 			roles: [],
 			permissions: [],
-			entitlements: [],
 			sessionId: `session-${ownerUserId}`,
 		},
+		services: createMockServices({ db, dbReadReplica: db, effectRuntime: runtime }),
 	})
 
 	const daemonContext = (hostId: string) => ({

@@ -32,8 +32,8 @@ describe.skipIf(Boolean(process.env.CI))('stack Redis configuration', () => {
 					electricProxy: 6,
 					rivetEngine: 7,
 					rivetServices: 8,
-					minioApi: 9,
-					minioConsole: 10,
+					rustfsApi: 9,
+					rustfsConsole: 10,
 				},
 				postgres: {
 					postgresPort: 10,

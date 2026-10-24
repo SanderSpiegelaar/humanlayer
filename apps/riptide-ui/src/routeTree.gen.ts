@@ -20,13 +20,11 @@ import { Route as AppBoardRouteImport } from './routes/_app/board'
 import { Route as AppPullRequestsRouteImport } from './routes/_app/pull-requests'
 import { Route as AppSessionsRouteRouteImport } from './routes/_app/sessions/route'
 import { Route as AppTasksRouteRouteImport } from './routes/_app/tasks/route'
-import { Route as BillingReturnRouteImport } from './routes/billing/return'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as SettingsAccessRequestsRouteImport } from './routes/settings/access-requests'
 import { Route as SettingsAgentRouteImport } from './routes/settings/agent'
 import { Route as SettingsAgentSignInRouteImport } from './routes/settings/agent-sign-in'
 import { Route as SettingsArchivedRouteImport } from './routes/settings/archived'
-import { Route as SettingsBillingRouteImport } from './routes/settings/billing'
 import { Route as SettingsDaemonsRouteImport } from './routes/settings/daemons'
 import { Route as SettingsDeviceSetupRouteImport } from './routes/settings/device-setup'
 import { Route as SettingsDiagnosticsRouteImport } from './routes/settings/diagnostics'
@@ -109,11 +107,6 @@ const AppTasksRouteRoute = AppTasksRouteRouteImport.update({
   path: '/tasks',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const BillingReturnRoute = BillingReturnRouteImport.update({
-  id: '/billing/return',
-  path: '/billing/return',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -137,11 +130,6 @@ const SettingsAgentSignInRoute = SettingsAgentSignInRouteImport.update({
 const SettingsArchivedRoute = SettingsArchivedRouteImport.update({
   id: '/archived',
   path: '/archived',
-  getParentRoute: () => SettingsRouteRoute,
-} as any)
-const SettingsBillingRoute = SettingsBillingRouteImport.update({
-  id: '/billing',
-  path: '/billing',
   getParentRoute: () => SettingsRouteRoute,
 } as any)
 const SettingsDaemonsRoute = SettingsDaemonsRouteImport.update({
@@ -295,12 +283,10 @@ export interface FileRoutesByFullPath {
   '/artifacts': typeof AppArtifactsRoute
   '/board': typeof AppBoardRoute
   '/pull-requests': typeof AppPullRequestsRoute
-  '/billing/return': typeof BillingReturnRoute
   '/settings/access-requests': typeof SettingsAccessRequestsRoute
   '/settings/agent': typeof SettingsAgentRoute
   '/settings/agent-sign-in': typeof SettingsAgentSignInRoute
   '/settings/archived': typeof SettingsArchivedRoute
-  '/settings/billing': typeof SettingsBillingRoute
   '/settings/daemons': typeof SettingsDaemonsRoute
   '/settings/device-setup': typeof SettingsDeviceSetupRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -338,12 +324,10 @@ export interface FileRoutesByTo {
   '/artifacts': typeof AppArtifactsRoute
   '/board': typeof AppBoardRoute
   '/pull-requests': typeof AppPullRequestsRoute
-  '/billing/return': typeof BillingReturnRoute
   '/settings/access-requests': typeof SettingsAccessRequestsRoute
   '/settings/agent': typeof SettingsAgentRoute
   '/settings/agent-sign-in': typeof SettingsAgentSignInRoute
   '/settings/archived': typeof SettingsArchivedRoute
-  '/settings/billing': typeof SettingsBillingRoute
   '/settings/daemons': typeof SettingsDaemonsRoute
   '/settings/device-setup': typeof SettingsDeviceSetupRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -386,12 +370,10 @@ export interface FileRoutesById {
   '/_app/artifacts': typeof AppArtifactsRoute
   '/_app/board': typeof AppBoardRoute
   '/_app/pull-requests': typeof AppPullRequestsRoute
-  '/billing/return': typeof BillingReturnRoute
   '/settings/access-requests': typeof SettingsAccessRequestsRoute
   '/settings/agent': typeof SettingsAgentRoute
   '/settings/agent-sign-in': typeof SettingsAgentSignInRoute
   '/settings/archived': typeof SettingsArchivedRoute
-  '/settings/billing': typeof SettingsBillingRoute
   '/settings/daemons': typeof SettingsDaemonsRoute
   '/settings/device-setup': typeof SettingsDeviceSetupRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -435,12 +417,10 @@ export interface FileRouteTypes {
     | '/artifacts'
     | '/board'
     | '/pull-requests'
-    | '/billing/return'
     | '/settings/access-requests'
     | '/settings/agent'
     | '/settings/agent-sign-in'
     | '/settings/archived'
-    | '/settings/billing'
     | '/settings/daemons'
     | '/settings/device-setup'
     | '/settings/diagnostics'
@@ -478,12 +458,10 @@ export interface FileRouteTypes {
     | '/artifacts'
     | '/board'
     | '/pull-requests'
-    | '/billing/return'
     | '/settings/access-requests'
     | '/settings/agent'
     | '/settings/agent-sign-in'
     | '/settings/archived'
-    | '/settings/billing'
     | '/settings/daemons'
     | '/settings/device-setup'
     | '/settings/diagnostics'
@@ -525,12 +503,10 @@ export interface FileRouteTypes {
     | '/_app/artifacts'
     | '/_app/board'
     | '/_app/pull-requests'
-    | '/billing/return'
     | '/settings/access-requests'
     | '/settings/agent'
     | '/settings/agent-sign-in'
     | '/settings/archived'
-    | '/settings/billing'
     | '/settings/daemons'
     | '/settings/device-setup'
     | '/settings/diagnostics'
@@ -567,7 +543,6 @@ export interface RootRouteChildren {
   SettingsRouteRoute: typeof SettingsRouteRouteWithChildren
   CallbackRoute: typeof CallbackRoute
   HostsRoute: typeof HostsRoute
-  BillingReturnRoute: typeof BillingReturnRoute
   SharedArtifactsArtifactIdRoute: typeof SharedArtifactsArtifactIdRoute
 }
 
@@ -650,13 +625,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTasksRouteRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/billing/return': {
-      id: '/billing/return'
-      path: '/billing/return'
-      fullPath: '/billing/return'
-      preLoaderRoute: typeof BillingReturnRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/settings/': {
       id: '/settings/'
       path: '/'
@@ -690,13 +658,6 @@ declare module '@tanstack/react-router' {
       path: '/archived'
       fullPath: '/settings/archived'
       preLoaderRoute: typeof SettingsArchivedRouteImport
-      parentRoute: typeof SettingsRouteRoute
-    }
-    '/settings/billing': {
-      id: '/settings/billing'
-      path: '/billing'
-      fullPath: '/settings/billing'
-      preLoaderRoute: typeof SettingsBillingRouteImport
       parentRoute: typeof SettingsRouteRoute
     }
     '/settings/daemons': {
@@ -973,7 +934,6 @@ interface SettingsRouteRouteChildren {
   SettingsAgentRoute: typeof SettingsAgentRoute
   SettingsAgentSignInRoute: typeof SettingsAgentSignInRoute
   SettingsArchivedRoute: typeof SettingsArchivedRoute
-  SettingsBillingRoute: typeof SettingsBillingRoute
   SettingsDaemonsRoute: typeof SettingsDaemonsRoute
   SettingsDeviceSetupRoute: typeof SettingsDeviceSetupRoute
   SettingsDiagnosticsRoute: typeof SettingsDiagnosticsRoute
@@ -996,7 +956,6 @@ const SettingsRouteRouteChildren: SettingsRouteRouteChildren = {
   SettingsAgentRoute: SettingsAgentRoute,
   SettingsAgentSignInRoute: SettingsAgentSignInRoute,
   SettingsArchivedRoute: SettingsArchivedRoute,
-  SettingsBillingRoute: SettingsBillingRoute,
   SettingsDaemonsRoute: SettingsDaemonsRoute,
   SettingsDeviceSetupRoute: SettingsDeviceSetupRoute,
   SettingsDiagnosticsRoute: SettingsDiagnosticsRoute,
@@ -1023,7 +982,6 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRouteRoute: SettingsRouteRouteWithChildren,
   CallbackRoute: CallbackRoute,
   HostsRoute: HostsRoute,
-  BillingReturnRoute: BillingReturnRoute,
   SharedArtifactsArtifactIdRoute: SharedArtifactsArtifactIdRoute,
 }
 export const routeTree = rootRouteImport

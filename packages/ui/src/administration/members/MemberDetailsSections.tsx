@@ -32,7 +32,7 @@ export function MemberDetailsProfile({ user }: MemberDetailsProfileProps) {
 					<Badge variant="outline" className="mb-2 border-muted-foreground/50 text-muted-foreground">
 						Deactivated
 					</Badge>
-					<p>This user is not counted for billing and cannot log in to this organization.</p>
+					<p>This member can't log in to this organization.</p>
 				</div>
 			)}
 			<Separator />

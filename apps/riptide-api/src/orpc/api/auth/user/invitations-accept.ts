@@ -1,9 +1,5 @@
-import { organizations } from '@humanlayer/db/tables/organizations'
 import type { Invitation } from '@workos-inc/node'
-import { eq } from 'drizzle-orm'
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 
-import { syncOrganizationSeatQuantity } from '../../../../lib/seat-sync'
 import { logger } from '../../../../logger'
 import { apiBaseNoOrg } from '../../../base'
 
@@ -12,7 +8,7 @@ export const acceptUserInvitationProcedure = apiBaseNoOrg.auth.user.invitations.
 		// Destructure at top of handler to avoid long chains
 		const {
 			auth,
-			services: { db, stripe, workos },
+			services: { workos },
 		} = context
 
 		// Get user email
@@ -75,11 +71,6 @@ export const acceptUserInvitationProcedure = apiBaseNoOrg.auth.user.invitations.
 						throw new Error('Invitation is missing organizationId')
 					}
 					await workos.userManagement.acceptInvitation(invitation.id)
-					const organizationId = await getLocalOrganizationId(db, workosOrganizationId)
-					await syncOrganizationSeatQuantity(
-						{ organizationId, reason: 'first_party_membership_mutation' },
-						{ workosService: workos, stripeService: stripe, db },
-					)
 					return { organizationId: workosOrganizationId }
 				} catch (error) {
 					logger.error({ invitationId: invitation.id, error }, 'Unable to accept invitation')
@@ -99,17 +90,3 @@ export const acceptUserInvitationProcedure = apiBaseNoOrg.auth.user.invitations.
 		}
 	},
 )
-
-async function getLocalOrganizationId(db: PostgresJsDatabase, workosOrganizationId: string): Promise<string> {
-	const [organization] = await db
-		.select({ id: organizations.id })
-		.from(organizations)
-		.where(eq(organizations.workos_organization_id, workosOrganizationId))
-		.limit(1)
-
-	if (!organization) {
-		throw new Error(`Organization with WorkOS ID ${workosOrganizationId} was not found while accepting invitation`)
-	}
-
-	return organization.id
-}

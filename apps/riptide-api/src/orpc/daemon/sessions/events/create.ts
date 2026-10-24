@@ -11,7 +11,7 @@ import { canWriteTaskForSession } from '../../../../db/task-auth'
 import { OnboardingService } from '../../../../effects/services/onboarding/onboarding.service'
 import { stripNullBytes } from '../../../../lib/strip-null-bytes'
 import logger from '../../../../logger'
-import { daemonBase, requiresDaemonBillingMiddleware, type Services } from '../../../base'
+import { daemonBase, type Services } from '../../../base'
 
 const RPI_SKILL_NAMES = [
 	'create-research-questions',
@@ -150,168 +150,166 @@ function extractSkillName(toolName: string | null | undefined, toolInputJson: un
  * - Daemon must be running this session (host_id check)
  * - User must have write permission on session (via task ACL or session ownership)
  */
-export const createEventProcedure = daemonBase.sessions.events.create
-	.use(requiresDaemonBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
-		// Parse the skill name ONCE before the transaction - parsing errors won't poison it.
-		// Both the RPI label append and the Linear status-advance lookup reuse it.
-		const skillName = extractSkillName(input.toolName, input.toolInputJson)
-		const rpiLabel = skillName ? skillToLabel[skillName] : undefined
-		const advanceStatus = skillName ? SKILL_TO_STATUS[skillName] : undefined
-		const { userId, organizationId, hostId } = context.auth
-		// Postgres rejects U+0000 in text and jsonb. Agents emit it when they read or write
-		// code that mentions null bytes (see lib/strip-null-bytes.ts). Without this the insert
-		// fails with 22P05, the daemon gets a 500, and the session dies (RIPTIDE-API-NE).
-		const content = stripNullBytes(input.content)
-		const toolInputJson = stripNullBytes(input.toolInputJson)
-		const toolResultContent = stripNullBytes(input.toolResultContent)
-		const { services } = context
-		const { db } = services
+export const createEventProcedure = daemonBase.sessions.events.create.handler(async ({ input, context, errors }) => {
+	// Parse the skill name ONCE before the transaction - parsing errors won't poison it.
+	// Both the RPI label append and the Linear status-advance lookup reuse it.
+	const skillName = extractSkillName(input.toolName, input.toolInputJson)
+	const rpiLabel = skillName ? skillToLabel[skillName] : undefined
+	const advanceStatus = skillName ? SKILL_TO_STATUS[skillName] : undefined
+	const { userId, organizationId, hostId } = context.auth
+	// Postgres rejects U+0000 in text and jsonb. Agents emit it when they read or write
+	// code that mentions null bytes (see lib/strip-null-bytes.ts). Without this the insert
+	// fails with 22P05, the daemon gets a 500, and the session dies (RIPTIDE-API-NE).
+	const content = stripNullBytes(input.content)
+	const toolInputJson = stripNullBytes(input.toolInputJson)
+	const toolResultContent = stripNullBytes(input.toolResultContent)
+	const { services } = context
+	const { db } = services
 
-		try {
-			const txResult = await db.transaction(async (tx) => {
-				// 1. Fetch session with auth-relevant fields
-				const [session] = await tx
-					.select({
-						id: sessions.id,
-						task_id: sessions.task_id,
-						created_by: sessions.created_by,
-						resource_owner_user_id: sessions.resource_owner_user_id,
-						host_id: sessions.host_id,
-					})
+	try {
+		const txResult = await db.transaction(async (tx) => {
+			// 1. Fetch session with auth-relevant fields
+			const [session] = await tx
+				.select({
+					id: sessions.id,
+					task_id: sessions.task_id,
+					created_by: sessions.created_by,
+					resource_owner_user_id: sessions.resource_owner_user_id,
+					host_id: sessions.host_id,
+				})
+				.from(sessions)
+				.where(and(eq(sessions.id, input.sessionId), eq(sessions.organization_id, organizationId)))
+				.limit(1)
+				.for('no key update')
+
+			if (!session) {
+				throw errors.NOT_FOUND()
+			}
+
+			// 2. Verify daemon is running this session (host_id check)
+			if (session.host_id !== hostId || session.created_by !== userId) {
+				throw errors.FORBIDDEN()
+			}
+
+			// 3. Use task auth helper for permission check
+			const canWrite = await canWriteTaskForSession(tx, session, userId, organizationId)
+			if (!canWrite) {
+				throw errors.FORBIDDEN()
+			}
+
+			// Insert the event.
+			//
+			// CORE-1634: the daemon can re-send an insert with an `id` it already
+			// persisted — the recovered-thinking replay re-inserts a streamed
+			// thinking-block id, and the oRPC client's retry plugin can re-send a
+			// write that already committed. Both hit `conversation_events_pkey`. Left
+			// as a raw insert that raises a 500, the daemon turns it into a
+			// session-fatal `status='failed'` (RIPTIDE-DAEMON-9A: 239 occ / 37 users).
+			//
+			// A pkey collision means "this exact event is already saved" (the replay
+			// carries byte-identical content), so we make the insert idempotent:
+			// ON CONFLICT (id) DO NOTHING, then short-circuit below. Note `id` defaults
+			// to a fresh uuidv7 when the daemon sends none, so non-id-bearing inserts
+			// never collide and are unaffected.
+			const [event] = await tx
+				.insert(conversationEvents)
+				.values({
+					id: input.eventId,
+					session_id: input.sessionId,
+					organization_id: context.auth.organizationId,
+					resource_owner_user_id: session.resource_owner_user_id,
+					task_id: session.task_id,
+					coding_agent_session_id: input.codingAgentSessionId,
+					coding_agent_event_id: input.codingAgentEventId,
+					event_type: input.eventType,
+					role: input.role,
+					content,
+					tool_call_id: input.toolCallId,
+					tool_name: input.toolName,
+					tool_input_json: toolInputJson,
+					parent_tool_use_id: input.parentToolUseId,
+					tool_result_for_id: input.toolResultForId,
+					tool_result_content: toolResultContent,
+					// Add token fields
+					input_tokens: input.inputTokens,
+					output_tokens: input.outputTokens,
+				})
+				.onConflictDoNothing({ target: conversationEvents.id })
+				.returning()
+
+			// Duplicate `id` → the event is already persisted (and its side effects —
+			// num_events increment, session update, label append — already ran on the
+			// first insert). Short-circuit idempotently: return the existing id + a
+			// current txid, skipping the writes below so we don't double-count. A
+			// collision is only possible when the daemon supplied `input.eventId`.
+			if (!event) {
+				const eventId = input.eventId
+				if (!eventId) {
+					throw new Error('duplicate conversation event has no eventId')
+				}
+				logger.info(
+					{ sessionId: input.sessionId, eventId: input.eventId },
+					'Duplicate conversation event id — idempotent no-op (CORE-1634)',
+				)
+				const txid = await getTxId(tx)
+				return {
+					eventId,
+					txid,
+					taskId: session.task_id,
+					resourceOwnerUserId: session.resource_owner_user_id,
+					duplicate: true,
+				}
+			}
+
+			// Build session update fields. Re-read num_events inside the tx so the increment uses the
+			// freshest value; a missing row (e.g. a concurrent delete) is a real error, not a silent crash.
+			let nextNumEvents = 1
+			if (session.id) {
+				const [currentSession] = await tx
+					.select({ num_events: sessions.num_events })
 					.from(sessions)
-					.where(and(eq(sessions.id, input.sessionId), eq(sessions.organization_id, organizationId)))
-					.limit(1)
-					.for('no key update')
-
-				if (!session) {
-					throw errors.NOT_FOUND()
+					.where(eq(sessions.id, input.sessionId))
+				if (!currentSession) {
+					throw new Error(`Session ${input.sessionId} not found while incrementing num_events`)
 				}
-
-				// 2. Verify daemon is running this session (host_id check)
-				if (session.host_id !== hostId || session.created_by !== userId) {
-					throw errors.FORBIDDEN()
-				}
-
-				// 3. Use task auth helper for permission check
-				const canWrite = await canWriteTaskForSession(tx, session, userId, organizationId)
-				if (!canWrite) {
-					throw errors.FORBIDDEN()
-				}
-
-				// Insert the event.
-				//
-				// CORE-1634: the daemon can re-send an insert with an `id` it already
-				// persisted — the recovered-thinking replay re-inserts a streamed
-				// thinking-block id, and the oRPC client's retry plugin can re-send a
-				// write that already committed. Both hit `conversation_events_pkey`. Left
-				// as a raw insert that raises a 500, the daemon turns it into a
-				// session-fatal `status='failed'` (RIPTIDE-DAEMON-9A: 239 occ / 37 users).
-				//
-				// A pkey collision means "this exact event is already saved" (the replay
-				// carries byte-identical content), so we make the insert idempotent:
-				// ON CONFLICT (id) DO NOTHING, then short-circuit below. Note `id` defaults
-				// to a fresh uuidv7 when the daemon sends none, so non-id-bearing inserts
-				// never collide and are unaffected.
-				const [event] = await tx
-					.insert(conversationEvents)
-					.values({
-						id: input.eventId,
-						session_id: input.sessionId,
-						organization_id: context.auth.organizationId,
-						resource_owner_user_id: session.resource_owner_user_id,
-						task_id: session.task_id,
-						coding_agent_session_id: input.codingAgentSessionId,
-						coding_agent_event_id: input.codingAgentEventId,
-						event_type: input.eventType,
-						role: input.role,
-						content,
-						tool_call_id: input.toolCallId,
-						tool_name: input.toolName,
-						tool_input_json: toolInputJson,
-						parent_tool_use_id: input.parentToolUseId,
-						tool_result_for_id: input.toolResultForId,
-						tool_result_content: toolResultContent,
-						// Add token fields
-						input_tokens: input.inputTokens,
-						output_tokens: input.outputTokens,
-					})
-					.onConflictDoNothing({ target: conversationEvents.id })
-					.returning()
-
-				// Duplicate `id` → the event is already persisted (and its side effects —
-				// num_events increment, session update, label append — already ran on the
-				// first insert). Short-circuit idempotently: return the existing id + a
-				// current txid, skipping the writes below so we don't double-count. A
-				// collision is only possible when the daemon supplied `input.eventId`.
-				if (!event) {
-					const eventId = input.eventId
-					if (!eventId) {
-						throw new Error('duplicate conversation event has no eventId')
-					}
-					logger.info(
-						{ sessionId: input.sessionId, eventId: input.eventId },
-						'Duplicate conversation event id — idempotent no-op (CORE-1634)',
-					)
-					const txid = await getTxId(tx)
-					return {
-						eventId,
-						txid,
-						taskId: session.task_id,
-						resourceOwnerUserId: session.resource_owner_user_id,
-						duplicate: true,
-					}
-				}
-
-				// Build session update fields. Re-read num_events inside the tx so the increment uses the
-				// freshest value; a missing row (e.g. a concurrent delete) is a real error, not a silent crash.
-				let nextNumEvents = 1
-				if (session.id) {
-					const [currentSession] = await tx
-						.select({ num_events: sessions.num_events })
-						.from(sessions)
-						.where(eq(sessions.id, input.sessionId))
-					if (!currentSession) {
-						throw new Error(`Session ${input.sessionId} not found while incrementing num_events`)
-					}
-					nextNumEvents = currentSession.num_events + 1
-				}
-				const sessionUpdateFields: PgUpdateSetSource<typeof sessions> = {
-					last_activity_at: BigInt(Date.now()),
-					num_events: nextNumEvents,
-				}
-				if (provesActiveExecution(input.eventType, input.role)) {
-					sessionUpdateFields.status = sql<SessionStatus>`CASE
+				nextNumEvents = currentSession.num_events + 1
+			}
+			const sessionUpdateFields: PgUpdateSetSource<typeof sessions> = {
+				last_activity_at: BigInt(Date.now()),
+				num_events: nextNumEvents,
+			}
+			if (provesActiveExecution(input.eventType, input.role)) {
+				sessionUpdateFields.status = sql<SessionStatus>`CASE
 						WHEN ${sessions.status} IN (${sql.join(
 							EVENT_REPAIRABLE_SESSION_STATUSES.map((status) => sql`${status}`),
 							sql`, `,
 						)}) THEN 'running'
 						ELSE ${sessions.status}
 					END`
-					sessionUpdateFields.error_message = sql<string | null>`CASE
+				sessionUpdateFields.error_message = sql<string | null>`CASE
 						WHEN ${sessions.status} IN (${sql.join(
 							EVENT_REPAIRABLE_SESSION_STATUSES.map((status) => sql`${status}`),
 							sql`, `,
 						)}) THEN NULL
 						ELSE ${sessions.error_message}
 					END`
-				}
+			}
 
-				// Update context window tokens if provided (only for top-level messages, not sub-agents)
-				// Sub-agent messages have parentToolUseId set and have their own smaller token counts
-				// which would incorrectly overwrite the session's context window
-				if (input.inputTokens !== undefined && input.outputTokens !== undefined && !input.parentToolUseId) {
-					sessionUpdateFields.context_window_tokens = input.inputTokens + input.outputTokens
-				}
+			// Update context window tokens if provided (only for top-level messages, not sub-agents)
+			// Sub-agent messages have parentToolUseId set and have their own smaller token counts
+			// which would incorrectly overwrite the session's context window
+			if (input.inputTokens !== undefined && input.outputTokens !== undefined && !input.parentToolUseId) {
+				sessionUpdateFields.context_window_tokens = input.inputTokens + input.outputTokens
+			}
 
-				await tx.update(sessions).set(sessionUpdateFields).where(eq(sessions.id, input.sessionId))
+			await tx.update(sessions).set(sessionUpdateFields).where(eq(sessions.id, input.sessionId))
 
-				// Append RPI label if detected (label was extracted before transaction started)
-				// Drizzle double-serializes JSONB, so labels may be stored as a JSON string scalar.
-				// Normalize with: CASE WHEN jsonb_typeof = 'string' THEN unwrap via #>> '{}' ELSE use as-is END
-				if (rpiLabel) {
-					logger.debug({ sessionId: input.sessionId, label: rpiLabel }, 'Appending RPI label to session')
-					await tx.execute(sql`
+			// Append RPI label if detected (label was extracted before transaction started)
+			// Drizzle double-serializes JSONB, so labels may be stored as a JSON string scalar.
+			// Normalize with: CASE WHEN jsonb_typeof = 'string' THEN unwrap via #>> '{}' ELSE use as-is END
+			if (rpiLabel) {
+				logger.debug({ sessionId: input.sessionId, label: rpiLabel }, 'Appending RPI label to session')
+				await tx.execute(sql`
 					UPDATE sessions
 					SET labels = CASE
 						WHEN EXISTS (
@@ -328,70 +326,70 @@ export const createEventProcedure = daemonBase.sessions.events.create
 					END
 					WHERE id = ${input.sessionId}
 				`)
-					logger.info({ sessionId: input.sessionId, label: rpiLabel }, 'RPI label appended to session')
-				}
-
-				const txid = await getTxId(tx)
-
-				return {
-					eventId: event.id,
-					txid,
-					taskId: session.task_id,
-					resourceOwnerUserId: session.resource_owner_user_id,
-					duplicate: false,
-				}
-			})
-
-			// Fire-and-forget onboarding "implementation started" milestone. Only fires
-			// when this event appended the implementation label (rpiLabel was extracted
-			// before the transaction). The service no-ops for any other label, so this is
-			// safe. Failures are swallowed to Sentry and never affect event persistence.
-			if (!txResult.duplicate && rpiLabel?.name === 'rpi:implementation') {
-				const onboardingSource = 'daemon.sessions.events.create'
-				services.effectRuntime.runFork(
-					Effect.gen(function* () {
-						const onboarding = yield* OnboardingService
-						yield* onboarding.recordImplementationStarted({
-							userId: txResult.resourceOwnerUserId,
-							sessionId: input.sessionId,
-							taskId: txResult.taskId,
-							label: rpiLabel,
-							source: 'daemon_event_label',
-						})
-					}).pipe(
-						Effect.catch((err) =>
-							Effect.sync(() => {
-								Sentry.captureException(err, {
-									tags: { error_type: 'onboarding_detached_failure', source: onboardingSource },
-									extra: {
-										userId: txResult.resourceOwnerUserId,
-										sessionId: input.sessionId,
-										source: onboardingSource,
-									},
-								})
-							}),
-						),
-					),
-				)
+				logger.info({ sessionId: input.sessionId, label: rpiLabel }, 'RPI label appended to session')
 			}
 
-			// Best-effort Linear status advancement AFTER the transaction commits.
-			// This must never affect event persistence, so it is fully swallowed.
-			// Both agent harnesses (CodeLayer/Codex and Claude Code) funnel tool calls
-			// through this procedure, so all of them advance Linear identically.
-			if (!txResult.duplicate && advanceStatus && txResult.taskId) {
-				await advanceLinearStatus(services, organizationId, txResult.taskId, advanceStatus)
-			}
+			const txid = await getTxId(tx)
 
 			return {
-				eventId: txResult.eventId,
-				transactionId: txResult.txid,
+				eventId: event.id,
+				txid,
+				taskId: session.task_id,
+				resourceOwnerUserId: session.resource_owner_user_id,
+				duplicate: false,
 			}
-		} catch (error: unknown) {
-			logger.error(error, 'Failed to create event')
-			throw error
+		})
+
+		// Fire-and-forget onboarding "implementation started" milestone. Only fires
+		// when this event appended the implementation label (rpiLabel was extracted
+		// before the transaction). The service no-ops for any other label, so this is
+		// safe. Failures are swallowed to Sentry and never affect event persistence.
+		if (!txResult.duplicate && rpiLabel?.name === 'rpi:implementation') {
+			const onboardingSource = 'daemon.sessions.events.create'
+			services.effectRuntime.runFork(
+				Effect.gen(function* () {
+					const onboarding = yield* OnboardingService
+					yield* onboarding.recordImplementationStarted({
+						userId: txResult.resourceOwnerUserId,
+						sessionId: input.sessionId,
+						taskId: txResult.taskId,
+						label: rpiLabel,
+						source: 'daemon_event_label',
+					})
+				}).pipe(
+					Effect.catch((err) =>
+						Effect.sync(() => {
+							Sentry.captureException(err, {
+								tags: { error_type: 'onboarding_detached_failure', source: onboardingSource },
+								extra: {
+									userId: txResult.resourceOwnerUserId,
+									sessionId: input.sessionId,
+									source: onboardingSource,
+								},
+							})
+						}),
+					),
+				),
+			)
 		}
-	})
+
+		// Best-effort Linear status advancement AFTER the transaction commits.
+		// This must never affect event persistence, so it is fully swallowed.
+		// Both agent harnesses (CodeLayer/Codex and Claude Code) funnel tool calls
+		// through this procedure, so all of them advance Linear identically.
+		if (!txResult.duplicate && advanceStatus && txResult.taskId) {
+			await advanceLinearStatus(services, organizationId, txResult.taskId, advanceStatus)
+		}
+
+		return {
+			eventId: txResult.eventId,
+			transactionId: txResult.txid,
+		}
+	} catch (error: unknown) {
+		logger.error(error, 'Failed to create event')
+		throw error
+	}
+})
 
 /**
  * Best-effort advance of the Linear issue linked to a task into `advanceStatus`.

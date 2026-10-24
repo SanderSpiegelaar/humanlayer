@@ -5,38 +5,26 @@ import { Effect } from 'effect'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { Resend } from 'resend'
-import Stripe from 'stripe'
 
 import { getAuthContext, getDaemonAuthContext } from './auth/context'
 import { jwksCache } from './auth/jwks-cache'
 import { db, dbReadReplica } from './db/db'
 import { appRuntime } from './effects/app-runtime'
 import { AccessRequestService } from './effects/services/access-request/access-request.service'
-import {
-	getResendApiKey,
-	getResendWebhookSecret,
-	getStripePricePro,
-	getStripePriceStarter,
-	getStripeSecretKey,
-	getStripeWebhookSecret,
-	requireEnvironment,
-} from './lib/environment'
+import { getResendApiKey, getResendWebhookSecret, requireEnvironment } from './lib/environment'
 import { getJiraClientId, getJiraClientSecret, getJiraOAuthRedirectUrl } from './lib/jira'
 import { JiraService } from './lib/jira-service'
 import { getLinearClientId, getLinearClientSecret, getLinearOAuthRedirectUrl } from './lib/linear'
 import { LinearService } from './lib/linear-service'
 import { requestBodyLimit } from './lib/request-body-limit'
 import { S3Service } from './lib/s3-service'
-import { StripeService } from './lib/stripe-service'
 import { logger } from './logger'
 import { apiHandler, daemonApiHandler } from './orpc'
-import { registerBillingCheckoutCompletionRoutes } from './routes/billing-checkout-completion'
 import { registerGitHubSetupCallbackRoute, registerGitHubWebhookRoute } from './webhooks/github'
 import { registerJiraOAuthCallbackRoute } from './webhooks/jira'
 import { registerLinearOAuthCallbackRoute } from './webhooks/linear'
 import { registerResendWebhookRoute } from './webhooks/resend'
 import { registerSlackInteractionsRoute, registerSlackOAuthCallbackRoute } from './webhooks/slack'
-import { registerStripeWebhookRoute } from './webhooks/stripe'
 import { registerWorkosWebhookRoute } from './webhooks/workos'
 import { workosSdkAdapter } from './workos'
 
@@ -67,11 +55,6 @@ const s3Service = new S3Service(
 
 const jiraService = new JiraService(getJiraClientId(), getJiraClientSecret(), db, getJiraOAuthRedirectUrl())
 const linearService = new LinearService(getLinearClientId(), getLinearClientSecret(), db, getLinearOAuthRedirectUrl())
-const stripeService = new StripeService(new Stripe(getStripeSecretKey()), getStripeWebhookSecret(), {
-	billingKvRuntime: appRuntime,
-	starterPriceId: getStripePriceStarter(),
-	proPriceId: getStripePricePro(),
-})
 const resend = new Resend(getResendApiKey())
 /**
  * App-runtime-backed facade for the WorkOS webhook's access-request backfill. The
@@ -120,15 +103,12 @@ app.get('/health', async (c) => {
 	}
 })
 
-registerStripeWebhookRoute(app, { appRuntime })
 registerWorkosWebhookRoute(app, {
 	workosService: workosSdkAdapter,
-	stripeService,
 	db,
 	backfillAccessRequestRequesterUserId,
 })
 registerResendWebhookRoute(app, { resend, webhookSecret: getResendWebhookSecret(), logger })
-registerBillingCheckoutCompletionRoutes(app)
 registerGitHubSetupCallbackRoute(app, { appRuntime, logger })
 registerGitHubWebhookRoute(app, { appRuntime, logger })
 registerJiraOAuthCallbackRoute(app, { jiraService, appRuntime, logger })
@@ -171,7 +151,6 @@ app.use('/rpc/api/v1/*', async (c, next) => {
 				s3: s3Service,
 				jira: jiraService,
 				linear: linearService,
-				stripe: stripeService,
 				db,
 				dbReadReplica,
 				effectRuntime: appRuntime,
@@ -213,7 +192,6 @@ app.use('/rpc/daemon/v1/*', async (c, next) => {
 				s3: s3Service,
 				jira: jiraService,
 				linear: linearService,
-				stripe: stripeService,
 				db,
 				dbReadReplica,
 				effectRuntime: appRuntime,

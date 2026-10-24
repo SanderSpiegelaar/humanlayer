@@ -2,11 +2,10 @@ import { Effect } from 'effect'
 
 import { advanceRepositorySetupStage } from '../../../effects/project-workspace/repository-progress'
 import { mapPostgresErrorToResponse } from '../../../effects/services/postgres/error-mapping'
-import { effectOrpcDaemonBase, requiresDaemonBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcDaemonBase } from '../../effect-base'
 
-export const advanceRepositorySetupStageProcedure = effectOrpcDaemonBase.projectWorkspaces.reportRepositoryResult
-	.use(requiresDaemonBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const advanceRepositorySetupStageProcedure =
+	effectOrpcDaemonBase.projectWorkspaces.reportRepositoryResult.effect(function* ({ input, context, errors }) {
 		const snapshot = yield* advanceRepositorySetupStage({
 			actor: context.auth,
 			...input,

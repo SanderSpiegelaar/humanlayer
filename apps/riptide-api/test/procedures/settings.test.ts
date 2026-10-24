@@ -28,19 +28,9 @@ import { getUserSettingsEffectProcedure as liveGetUserSettingsProcedure } from '
 import { updateUserSettingsEffectProcedure as liveUpdateUserSettingsProcedure } from '../../src/orpc/api/auth/user/settings-update.effect'
 import { syncV2SessionsProcedure } from '../../src/orpc/api/sync/v2/sessions'
 import { daemonGetSettingsEffectProcedure as liveDaemonGetSettingsProcedure } from '../../src/orpc/daemon/settings/get.effect'
-import { billingKvLayerFromTestService, TestBillingKvService } from '../fixtures/billing-kv-runtime'
-import {
-	createMockApiContext,
-	createMockDaemonContext,
-	createMockStripeService,
-	createMockWorkosService,
-} from '../mocks'
+import { createMockApiContext, createMockDaemonContext, createMockWorkosService } from '../mocks'
 import { StatefulMockWorkosService } from '../mocks/workos-service.mock'
-import {
-	bindProcedureToRuntime,
-	billingPriceIdsLayer,
-	createRuntimeWithTestPostgresLayer,
-} from '../utils/effect-procedure-test-runtime'
+import { bindProcedureToRuntime, createRuntimeWithTestPostgresLayer } from '../utils/effect-procedure-test-runtime'
 import { requireExternalTestServices } from '../utils/external-test-services'
 import { createTestDb } from '../utils/test-db'
 
@@ -58,7 +48,6 @@ describe('settings', async () => {
 	let getUserInfoProcedure!: typeof liveGetUserInfoProcedure
 
 	const workos = createMockWorkosService()
-	const stripe = createMockStripeService()
 	const services = {
 		workos,
 		get db() {
@@ -67,7 +56,6 @@ describe('settings', async () => {
 		get dbReadReplica() {
 			return db
 		},
-		stripe,
 	}
 
 	// Each test uses a unique userId to avoid inter-test interference
@@ -91,7 +79,6 @@ describe('settings', async () => {
 		role: '',
 		roles: [] as string[],
 		permissions: [] as string[],
-		entitlements: [] as string[],
 		sessionId: 'test-session',
 	})
 
@@ -102,7 +89,6 @@ describe('settings', async () => {
 		role: 'admin',
 		roles: ['admin'],
 		permissions: [] as string[],
-		entitlements: [] as string[],
 		sessionId: 'test-session',
 	})
 
@@ -111,45 +97,6 @@ describe('settings', async () => {
 		organizationId,
 		hostId: 'test-host',
 	})
-
-	const planRuntimes: ReturnType<typeof createRuntimeWithTestPostgresLayer>[] = []
-
-	// Procedures bound to a runtime whose billing KV holds the given plan for the org.
-	const proceduresOnPlan = async (organizationId: string, priceId: string, kv = new TestBillingKvService()) => {
-		const customerId = `cus_${organizationId}`
-		await kv.setOrgCustomerId(organizationId, customerId)
-		await kv.setSubscriptionCache(customerId, {
-			customerId,
-			organizationId,
-			subscriptionId: 'sub_test',
-			status: 'active',
-			priceId,
-			currentPeriodEnd: null,
-			hasPaidInvoice: true,
-			hasPaymentMethod: true,
-			pastDueAt: null,
-			syncedAt: Date.now(),
-		})
-		return proceduresOnBillingKv(kv)
-	}
-
-	const proceduresOnBillingKv = (kv: TestBillingKvService) => {
-		const runtime = createRuntimeWithTestPostgresLayer(db, {
-			billingKv: billingKvLayerFromTestService(kv),
-			billingPriceIds: billingPriceIdsLayer({ starter: 'price_starter', pro: 'price_pro' }),
-		})
-		planRuntimes.push(runtime)
-		return {
-			getUserInfo: bindProcedureToRuntime(liveGetUserInfoProcedure, runtime),
-			setOrgSettings: bindProcedureToRuntime(liveSetOrgSettingsProcedure, runtime),
-		}
-	}
-
-	class DownBillingKvService extends TestBillingKvService {
-		override async getOrgCustomerId(): Promise<string | null> {
-			throw new Error('billing kv down')
-		}
-	}
 
 	beforeAll(async () => {
 		const testDb = await createTestDb('settings')
@@ -165,7 +112,6 @@ describe('settings', async () => {
 	}, 60000)
 
 	afterAll(async () => {
-		await Promise.all(planRuntimes.map((runtime) => runtime.dispose()))
 		await effectRuntime?.dispose()
 		await cleanupTestDb?.()
 	}, 30000)
@@ -1545,159 +1491,46 @@ describe('settings', async () => {
 		expect(result.haikuResearchSubagentsEnabled).toBe(false)
 	})
 
-	// ==================== Advanced Metrics entitlement (auth.user.info) ====================
-
-	// `advancedMetricsAvailable` decides whether the collection toggles render at all, and
-	// `advancedMetricsVisible` whether the sidebar link and the dashboard route do. They are the
-	// only client-visible form of the two gates, so they are asserted here rather than left to the
-	// middleware tests.
-
-	test('user info reports Advanced Metrics available for a Pro org', async () => {
+	test('user info shows metrics to admins without billing and defaults collection off', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
-		const { getUserInfo } = await proceduresOnPlan(orgId, 'price_pro')
-
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			const result = await call(
-				getUserInfo,
-				{},
-				{ context: createMockApiContext({ auth: makeAdminAuth(userId, orgId), services }) },
-			)
-			expect(result.advancedMetricsAvailable).toBe(true)
-			// Collection is a separate decision, and defaults off with no settings row.
-			expect(result.commitTrackingEnabled).toBe(false)
-			expect(result.prTrackingEnabled).toBe(false)
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
+		const result = await call(
+			getUserInfoProcedure,
+			{},
+			{ context: createMockApiContext({ auth: makeAdminAuth(userId, orgId), services }) },
+		)
+		expect(result.advancedMetricsVisible).toBe(true)
+		expect(result.commitTrackingEnabled).toBe(false)
+		expect(result.prTrackingEnabled).toBe(false)
 	})
-
-	// A Starter subscription is in good standing too, so standing alone cannot be the gate.
-	test('user info reports Advanced Metrics unavailable for a Starter org', async () => {
-		const userId = getUniqueUserId()
-		const orgId = await createTestOrg()
-		const { getUserInfo } = await proceduresOnPlan(orgId, 'price_starter')
-
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			const result = await call(
-				getUserInfo,
-				{},
-				{ context: createMockApiContext({ auth: makeAdminAuth(userId, orgId), services }) },
-			)
-			expect(result.advancedMetricsAvailable).toBe(false)
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
-	})
-
-	test('user info reports Advanced Metrics unavailable for an org with no Stripe customer', async () => {
-		const userId = getUniqueUserId()
-		const orgId = await createTestOrg()
-
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			const result = await call(
-				getUserInfoProcedure,
-				{},
-				{ context: createMockApiContext({ auth: makeAdminAuth(userId, orgId), services }) },
-			)
-			expect(result.advancedMetricsAvailable).toBe(false)
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
-	})
-
-	// Withholding a dashboard is not refusing a write: a KV lookup that failed must not hide the
-	// page a paying org bought. See effects/services/billing/entitlements.service.ts.
-	test('a billing lookup that fails still reports Advanced Metrics available', async () => {
-		const userId = getUniqueUserId()
-		const orgId = await createTestOrg()
-		const { getUserInfo } = proceduresOnBillingKv(new DownBillingKvService())
-
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			const result = await call(
-				getUserInfo,
-				{},
-				{ context: createMockApiContext({ auth: makeAdminAuth(userId, orgId), services }) },
-			)
-			expect(result.advancedMetricsAvailable).toBe(true)
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
-	})
-
-	// ==================== Advanced Metrics audience (auth.user.info) ====================
 
 	test('user info hides Advanced Metrics from a member until the org opens it to everyone', async () => {
 		const orgId = await createTestOrg()
-		const { getUserInfo, setOrgSettings } = await proceduresOnPlan(orgId, 'price_pro')
 		const memberContext = {
 			context: createMockApiContext({ auth: makeUserAuth(getUniqueUserId(), orgId), services }),
 		}
 
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			const before = await call(getUserInfo, {}, memberContext)
-			expect(before.advancedMetricsAvailable).toBe(true)
-			expect(before.advancedMetricsVisible).toBe(false)
-
-			await call(
-				setOrgSettings,
-				{ advancedMetricsVisibleToAllMembers: true },
-				{ context: createMockApiContext({ auth: makeAdminAuth(getUniqueUserId(), orgId), services }) },
-			)
-
-			const after = await call(getUserInfo, {}, memberContext)
-			expect(after.advancedMetricsVisible).toBe(true)
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
-	})
-
-	test('user info shows Advanced Metrics to an admin of an org that never opted in', async () => {
-		const orgId = await createTestOrg()
-		const { getUserInfo } = await proceduresOnPlan(orgId, 'price_pro')
-
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			const result = await call(
-				getUserInfo,
-				{},
-				{ context: createMockApiContext({ auth: makeAdminAuth(getUniqueUserId(), orgId), services }) },
-			)
-			expect(result.advancedMetricsVisible).toBe(true)
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
-	})
-
-	// The audience never substitutes for the plan: a stored opt-in from an org that has since
-	// dropped to Starter must not put the page back in front of its members.
-	test('user info hides Advanced Metrics from an opted-in org that is not entitled', async () => {
-		const orgId = await createTestOrg()
-		const { getUserInfo, setOrgSettings } = await proceduresOnPlan(orgId, 'price_starter')
+		const before = await call(getUserInfoProcedure, {}, memberContext)
+		expect(before.advancedMetricsVisible).toBe(false)
 
 		await call(
-			setOrgSettings,
+			setOrgSettingsProcedure,
 			{ advancedMetricsVisibleToAllMembers: true },
 			{ context: createMockApiContext({ auth: makeAdminAuth(getUniqueUserId(), orgId), services }) },
 		)
 
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			const result = await call(
-				getUserInfo,
-				{},
-				{ context: createMockApiContext({ auth: makeUserAuth(getUniqueUserId(), orgId), services }) },
-			)
-			expect(result.advancedMetricsAvailable).toBe(false)
-			expect(result.advancedMetricsVisible).toBe(false)
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
+		const after = await call(getUserInfoProcedure, {}, memberContext)
+		expect(after.advancedMetricsVisible).toBe(true)
+	})
+
+	test('user info shows Advanced Metrics to an admin of an org that never opted in', async () => {
+		const orgId = await createTestOrg()
+		const result = await call(
+			getUserInfoProcedure,
+			{},
+			{ context: createMockApiContext({ auth: makeAdminAuth(getUniqueUserId(), orgId), services }) },
+		)
+		expect(result.advancedMetricsVisible).toBe(true)
 	})
 
 	test('advancedMetricsVisibleToAllMembers round-trips and survives an unrelated settings write', async () => {
@@ -1718,25 +1551,14 @@ describe('settings', async () => {
 		expect(after.slackIntegrationEnabled).toBe(true)
 	})
 
-	test('advancedMetricsVisibleToAllMembers is rejected for a Starter org but can always be turned off', async () => {
+	test('advancedMetricsVisibleToAllMembers can be enabled and disabled without billing', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
 		const adminContext = { context: createMockApiContext({ auth: makeAdminAuth(userId, orgId), services }) }
-		const { setOrgSettings } = await proceduresOnPlan(orgId, 'price_starter')
-
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			await expect(
-				call(setOrgSettings, { advancedMetricsVisibleToAllMembers: true }, adminContext),
-			).rejects.toMatchObject({ code: 'METRICS_BILLING_REQUIRED' })
-
-			// Turning it off is never gated: an org whose plan lapsed must still be able to close
-			// the page, and the entitlement check it would face fails open.
-			const off = await call(setOrgSettings, { advancedMetricsVisibleToAllMembers: false }, adminContext)
-			expect(off.advancedMetricsVisibleToAllMembers).toBe(false)
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
+		const on = await call(setOrgSettingsProcedure, { advancedMetricsVisibleToAllMembers: true }, adminContext)
+		expect(on.advancedMetricsVisibleToAllMembers).toBe(true)
+		const off = await call(setOrgSettingsProcedure, { advancedMetricsVisibleToAllMembers: false }, adminContext)
+		expect(off.advancedMetricsVisibleToAllMembers).toBe(false)
 	})
 
 	// ==================== Advanced Metrics Collection Toggle ====================
@@ -1755,57 +1577,37 @@ describe('settings', async () => {
 		expect(result.prTrackingEnabled).toBe(false)
 	})
 
-	test('commitTrackingEnabled is rejected for a Starter org', async () => {
+	test('commitTrackingEnabled can be enabled without billing state', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
 		const adminAuth = makeAdminAuth(userId, orgId)
-		const { setOrgSettings } = await proceduresOnPlan(orgId, 'price_starter')
-
-		// The suite runs with enforcement off, which entitles every org. Turn it on so the gate is
-		// exercised rather than short-circuited.
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			await expect(
-				call(
-					setOrgSettings,
-					{ commitTrackingEnabled: true },
-					{ context: createMockApiContext({ auth: adminAuth, services }) },
-				),
-			).rejects.toMatchObject({ code: 'METRICS_BILLING_REQUIRED' })
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
-
-		// And nothing was written — a rejected toggle must not create a settings row either.
+		const result = await call(
+			setOrgSettingsProcedure,
+			{ commitTrackingEnabled: true },
+			{ context: createMockApiContext({ auth: adminAuth, services }) },
+		)
+		expect(result.commitTrackingEnabled).toBe(true)
 		const [row] = await db
 			.select()
 			.from(organizationSettings)
 			.where(eq(organizationSettings.organization_id, orgId))
 			.limit(1)
-		expect(row?.commit_tracking_enabled ?? false).toBe(false)
+		expect(row?.commit_tracking_enabled).toBe(true)
 	})
 
-	test('an org that lost its entitlement can still turn commit tracking OFF', async () => {
+	test('an organization can turn commit tracking off', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
 		const adminAuth = makeAdminAuth(userId, orgId)
 
-		// Collecting already — enabled while the subscription was in good standing.
 		await db.insert(organizationSettings).values({ organization_id: orgId, commit_tracking_enabled: true })
 
-		// Daemons collect on the stored flag alone, so a lost entitlement must not trap the org in
-		// telemetry it can no longer withdraw from. No Stripe customer is the strongest form of lost.
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			const result = await call(
-				setOrgSettingsProcedure,
-				{ commitTrackingEnabled: false },
-				{ context: createMockApiContext({ auth: adminAuth, services }) },
-			)
-			expect(result.commitTrackingEnabled).toBe(false)
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
+		const result = await call(
+			setOrgSettingsProcedure,
+			{ commitTrackingEnabled: false },
+			{ context: createMockApiContext({ auth: adminAuth, services }) },
+		)
+		expect(result.commitTrackingEnabled).toBe(false)
 
 		const [row] = await db
 			.select()
@@ -1815,7 +1617,7 @@ describe('settings', async () => {
 		expect(row?.commit_tracking_enabled).toBe(false)
 	})
 
-	test('an entitled org can turn commit tracking on and off; turning it off takes PR tracking with it', async () => {
+	test('an organization can turn commit tracking on and off; turning it off takes PR tracking with it', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
 		const adminAuth = makeAdminAuth(userId, orgId)
@@ -1849,26 +1651,6 @@ describe('settings', async () => {
 			.limit(1)
 		expect(row?.commit_tracking_enabled).toBe(false)
 		expect(row?.pr_tracking_enabled).toBe(false)
-	})
-
-	test('prTrackingEnabled is rejected for a Starter org', async () => {
-		const userId = getUniqueUserId()
-		const orgId = await createTestOrg()
-		const adminAuth = makeAdminAuth(userId, orgId)
-		const { setOrgSettings } = await proceduresOnPlan(orgId, 'price_starter')
-
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			await expect(
-				call(
-					setOrgSettings,
-					{ prTrackingEnabled: true },
-					{ context: createMockApiContext({ auth: adminAuth, services }) },
-				),
-			).rejects.toMatchObject({ code: 'METRICS_BILLING_REQUIRED' })
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
 	})
 
 	test('prTrackingEnabled is rejected without a GitHub App installation that reaches a repository', async () => {
@@ -1970,7 +1752,7 @@ describe('settings', async () => {
 		expect(setOff.prTrackingEnabled).toBe(false)
 	})
 
-	test('an entitled org with a covered repository can turn pr tracking on once commit tracking is on', async () => {
+	test('an organization with a covered repository can turn pr tracking on once commit tracking is on', async () => {
 		const userId = getUniqueUserId()
 		const orgId = await createTestOrg()
 		const adminAuth = makeAdminAuth(userId, orgId)

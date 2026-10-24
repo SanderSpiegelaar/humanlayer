@@ -12,14 +12,6 @@ export function requireEnvironment(name: string, defaultValue?: string): string 
 	return value
 }
 
-export function getStripeSecretKey(): string {
-	return requireEnvironment('STRIPE_SECRET_KEY')
-}
-
-export function getStripeWebhookSecret(): string {
-	return requireEnvironment('STRIPE_WEBHOOK_SECRET')
-}
-
 export function getWorkosWebhookSecret(): string {
 	return requireEnvironment('WORKOS_WEBHOOK_SECRET')
 }
@@ -30,30 +22,6 @@ export function getResendApiKey(): string {
 
 export function getResendWebhookSecret(): string {
 	return requireEnvironment('RESEND_WEBHOOK_SECRET')
-}
-
-export function getKvUrl(): string {
-	return requireEnvironment('KV_URL')
-}
-
-export function getStripePricePro(): string {
-	const value = requireEnvironment('STRIPE_PRICE_PRO').trim()
-	if (!value.startsWith('price_')) {
-		throw new Error('STRIPE_PRICE_PRO must be a Stripe price ID beginning with price_')
-	}
-	return value
-}
-
-export function getStripePriceStarter(): string {
-	const value = requireEnvironment('STRIPE_PRICE_STARTER').trim()
-	if (!value.startsWith('price_')) {
-		throw new Error('STRIPE_PRICE_STARTER must be a Stripe price ID beginning with price_')
-	}
-	return value
-}
-
-export function isBillingEnforcementEnabled(): boolean {
-	return requireEnvironment('IS_BILLING_ENFORCEMENT_ENABLED') === 'true'
 }
 
 /**

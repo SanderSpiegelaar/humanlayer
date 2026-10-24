@@ -1,7 +1,7 @@
 import z from 'zod/v4'
 
 import { contractBuilder } from '../../../contract-builder'
-import { MembershipStatusSchema } from '../../../types/billing'
+import { MembershipStatusSchema } from '../../../types/membership'
 
 export const ListAdminUsersInputSchema = z.object({})
 

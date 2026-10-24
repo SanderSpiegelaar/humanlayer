@@ -4,7 +4,7 @@ import {
 	createApiManifest,
 	createRivetManifest,
 	createElectricManifest,
-	createMinioManifest,
+	createRustfsManifest,
 	createPostgresManifest,
 	createRedisManifest,
 	createTestServicesManifest,
@@ -42,6 +42,11 @@ export function projectStackRecord(params: {
 	readonly tabColor: string
 }): StackRecord {
 	const { identity, existing, worktreePath, allocation, now, nativeIconIndex, tabColor } = params
+	if (existing && ('minio' in existing || 'minioApi' in existing.ports)) {
+		throw new StackPlanningError({
+			reason: 'This stack uses MinIO. Create a new RustFS stack and copy existing objects through S3 before switching. Existing volumes are unchanged.',
+		})
+	}
 	const { ports } = allocation
 	const routes = createStackRoutes(identity.id)
 	return {
@@ -74,14 +79,14 @@ export function projectStackRecord(params: {
 			enginePort: ports.rivetEngine,
 			servicesPort: ports.rivetServices,
 		}),
-		minio: createMinioManifest({
+		rustfs: createRustfsManifest({
 			composeProject: identity.dockerName,
-			apiPort: ports.minioApi,
-			consolePort: ports.minioConsole,
-			volume: existing?.minio?.volume,
-			bucket: existing?.minio?.bucket,
-			accessKeyId: existing?.minio?.accessKeyId,
-			secretAccessKey: existing?.minio?.secretAccessKey,
+			apiPort: ports.rustfsApi,
+			consolePort: ports.rustfsConsole,
+			volume: existing?.rustfs?.volume,
+			bucket: existing?.rustfs?.bucket,
+			accessKeyId: existing?.rustfs?.accessKeyId,
+			secretAccessKey: existing?.rustfs?.secretAccessKey,
 		}),
 		redis: createRedisManifest({
 			composeProject: identity.dockerName,

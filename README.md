@@ -19,7 +19,7 @@ This repo holds all of it. It's a [Turborepo](https://turborepo.com) monorepo th
 - `apps/riptide-rpi-claude-plugin`, `apps/linear-cli`: the Research-Plan-Implement skills and the Linear CLI
 - `apps/docs`: the user docs
 - `apps/devstack`: runs a full local stack per worktree
-- `packages/`: shared libraries (`db`, `schemas`, `ui`, `sync`, `ai`, `billing`, ...)
+- `packages/`: shared libraries (`db`, `schemas`, `ui`, `sync`, `ai`, ...)
 - `contracts/`: the oRPC and Effect RPC contracts between the apps
 
 ## Get started
@@ -28,22 +28,21 @@ You need [Bun](https://bun.sh) and Docker. Building `apps/riptide-native` also n
 
 ```
 bun install
-cp .env.example .env
 bun --bun run typecheck
 bun run test
 ```
 
 `bun --bun run devstack help` explains how to run the whole stack locally. [CONTRIBUTING.md](CONTRIBUTING.md) lists every check a pull request must pass.
 
-A build from source sends nothing to us: Sentry, PostHog, and the WorkOS client ID come from env, and stay off when unset. `.env.example` lists them.
+Sentry and PostHog stay off unless you configure them. Starting the application still requires WorkOS and other service configuration.
 
 ## Self-hosting
 
-HumanLayer Cloud runs this code. Guides for running it yourself are in progress.
+Self-hosting support is incomplete. Subscription billing has been removed, but authentication still requires WorkOS. Local accounts and first-administrator bootstrap are not implemented.
 
+The Docker Compose file starts development infrastructure, not the application services. It uses development credentials and publishes internal service ports. Do not expose it unchanged on the internet.
 
-⚠️ note - If you use the Docker Compose file as a starter for self hosting, please note that it uses default/simple passwords that should be updated before you deploy.
-
+Object storage uses RustFS with a separate data volume. Existing MinIO volumes are not reused. Devstack refuses to switch an existing MinIO stack automatically. Copy its objects through S3 before switching, and retain the old volume until the copy is verified.
 
 ## License
 

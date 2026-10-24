@@ -69,6 +69,17 @@ describe('settingsStore keybinding setters', () => {
 })
 
 describe('settingsStore migration', () => {
+	test('drops the retired billing preview without changing user preferences', () => {
+		const state = migrateSettingsState({ billingPreviewEnabled: true, theme: 'rose-pine', zoomLevel: 1.25 }, 40)
+		expect(state).not.toHaveProperty('billingPreviewEnabled')
+		expect(state.theme).toBe('rose-pine')
+		expect(state.zoomLevel).toBe(1.25)
+		expect(useSettingsStore.getState()).not.toHaveProperty('billingPreviewEnabled')
+		expect(useSettingsStore.persist.getOptions().partialize?.(useSettingsStore.getState())).not.toHaveProperty(
+			'billingPreviewEnabled',
+		)
+	})
+
 	test('defaults the Fold Coding Agent experiment off at v30', () => {
 		expect(migrateSettingsState({}, 29).useFoldCodingAgent).toBe(false)
 		expect(migrateSettingsState({ useFoldCodingAgent: true }, 29).useFoldCodingAgent).toBe(true)

@@ -24,11 +24,6 @@ export function useUserInfo() {
 	return {
 		dbOrganizationId: data?.organizationId,
 		userId: data?.userId,
-		// True when the org's billing entitles it to Advanced Metrics: gates the collection toggles
-		// and the audience switch in settings, both of which are an admin's to set.
-		advancedMetricsAvailable: data?.advancedMetricsAvailable ?? false,
-		// True when this viewer may open the page: entitlement plus audience. Server-computed so the
-		// client never re-derives who counts as the audience.
 		advancedMetricsVisible: data?.advancedMetricsVisible ?? false,
 		// Collection flags — Advanced Metrics locks the tabs whose pipeline is off.
 		commitTrackingEnabled: data?.commitTrackingEnabled ?? false,

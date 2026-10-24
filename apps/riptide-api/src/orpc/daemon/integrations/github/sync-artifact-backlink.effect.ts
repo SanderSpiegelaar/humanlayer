@@ -1,11 +1,10 @@
 import { Effect } from 'effect'
 
 import { GitHubService } from '../../../../effects/services/github/github.service'
-import { effectOrpcDaemonBase, requiresDaemonBillingEffectMiddleware } from '../../../effect-base'
+import { effectOrpcDaemonBase } from '../../../effect-base'
 
-export const syncGitHubArtifactBacklinkProcedure = effectOrpcDaemonBase.integrations.github.syncArtifactBacklink
-	.use(requiresDaemonBillingEffectMiddleware)
-	.effect(function* ({ input, context }) {
+export const syncGitHubArtifactBacklinkProcedure = effectOrpcDaemonBase.integrations.github.syncArtifactBacklink.effect(
+	function* ({ input, context }) {
 		const github = yield* GitHubService
 		return yield* github
 			.syncArtifactBacklink({
@@ -22,4 +21,5 @@ export const syncGitHubArtifactBacklinkProcedure = effectOrpcDaemonBase.integrat
 					),
 				),
 			)
-	})
+	},
+)

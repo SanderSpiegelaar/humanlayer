@@ -3,11 +3,10 @@ import { and, eq } from 'drizzle-orm'
 import { Effect } from 'effect'
 
 import { PostgresDb } from '../../../effects/services/postgres/postgres-db.service'
-import { effectOrpcBaseOrganizationRequired, requiresBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcBaseOrganizationRequired } from '../../effect-base'
 
-export const requestHostUpdateEffectProcedure = effectOrpcBaseOrganizationRequired.hosts.update.request
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const requestHostUpdateEffectProcedure = effectOrpcBaseOrganizationRequired.hosts.update.request.effect(
+	function* ({ input, context, errors }) {
 		// services
 		const postgres = yield* PostgresDb
 
@@ -56,4 +55,5 @@ export const requestHostUpdateEffectProcedure = effectOrpcBaseOrganizationRequir
 			.pipe(failOnUnavailableDatabase)
 
 		return { hostId: input.hostId, version: input.version }
-	})
+	},
+)

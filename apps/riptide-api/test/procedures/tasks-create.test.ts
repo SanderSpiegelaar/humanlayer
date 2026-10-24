@@ -39,16 +39,11 @@ import { saveTaskDraftProcedure as unboundSaveTaskDraftProcedure } from '../../s
 import {
 	createMockApiAuth,
 	createMockApiContext,
-	billingAccessLayer,
 	createMockJiraService,
 	createMockLinearService,
 	createMockS3Service,
 } from '../mocks'
-import {
-	bindProcedureToRuntime,
-	createRuntimeWithTestPostgresLayer,
-	type TestRuntimeOptions,
-} from '../utils/effect-procedure-test-runtime'
+import { bindProcedureToRuntime, createRuntimeWithTestPostgresLayer } from '../utils/effect-procedure-test-runtime'
 import { requireExternalTestServices } from '../utils/external-test-services'
 import { createTestDb } from '../utils/test-db'
 
@@ -119,7 +114,6 @@ describe('api/tasks/create', async () => {
 		linear = createMockLinearService(),
 		jira = createMockJiraService(),
 		s3 = createMockS3Service(),
-		billingAccess = billingAccessLayer(),
 		effectRuntime,
 	}: {
 		uid?: string
@@ -128,7 +122,6 @@ describe('api/tasks/create', async () => {
 		linear?: ReturnType<typeof createMockLinearService>
 		jira?: ReturnType<typeof createMockJiraService>
 		s3?: ReturnType<typeof createMockS3Service>
-		billingAccess?: TestRuntimeOptions['billingAccess']
 		effectRuntime?: AppRuntime
 	} = {}) {
 		return createMockApiContext({
@@ -141,7 +134,6 @@ describe('api/tasks/create', async () => {
 				s3,
 				...(effectRuntime ? { effectRuntime } : {}),
 			},
-			billingAccess,
 		})
 	}
 
@@ -915,49 +907,28 @@ describe('api/tasks/create', async () => {
 		).resolves.toMatchObject({ result: 'already-exists', task: { id: taskId }, firstSessionId: null })
 	})
 
-	test('committed replays converge before billing while new work remains billable', async () => {
-		const originalBillingEnforcement = process.env.IS_BILLING_ENFORCEMENT_ENABLED
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
+	test('committed replays converge and new tasks remain available without billing', async () => {
 		const taskId = uuidv7()
 		const sessionId = uuidv7()
-		const allowedBilling = billingAccessLayer({ decision: 'allowed' })
-		const blockedEvaluate = vi.fn(async () => 'blocked' as const)
-		const blockedBilling = billingAccessLayer({ decide: blockedEvaluate })
+		await call(
+			createTaskProcedure,
+			{
+				id: taskId,
+				name: 'Committed task',
+				firstSession: { ...firstSessionInput(), id: sessionId, eventId: uuidv7() },
+			},
+			{ context: makeContext() },
+		)
 
-		try {
-			await call(
-				createTaskProcedure,
-				{
-					id: taskId,
-					name: 'Committed before billing block',
-					firstSession: { ...firstSessionInput(), id: sessionId, eventId: uuidv7() },
-				},
-				{ context: makeContext({ billingAccess: allowedBilling }) },
-			)
+		await expect(
+			call(createTaskProcedure, { id: taskId, name: 'Lost response retry' }, { context: makeContext() }),
+		).resolves.toMatchObject({ result: 'already-exists', task: { id: taskId }, firstSessionId: sessionId })
 
-			await expect(
-				call(
-					createTaskProcedure,
-					{ id: taskId, name: 'Lost response retry' },
-					{ context: makeContext({ billingAccess: blockedBilling }) },
-				),
-			).resolves.toMatchObject({ result: 'already-exists', task: { id: taskId }, firstSessionId: sessionId })
-			expect(blockedEvaluate).not.toHaveBeenCalled()
-
-			const newTaskId = uuidv7()
-			await expect(
-				call(
-					createTaskProcedure,
-					{ id: newTaskId, name: 'New blocked work' },
-					{ context: makeContext({ billingAccess: blockedBilling }) },
-				),
-			).rejects.toMatchObject({ code: 'BILLING_REQUIRED' })
-			expect(blockedEvaluate).toHaveBeenCalledOnce()
-			expect(await db.select().from(tasks).where(eq(tasks.id, newTaskId))).toHaveLength(0)
-		} finally {
-			if (originalBillingEnforcement === undefined) delete process.env.IS_BILLING_ENFORCEMENT_ENABLED
-			else process.env.IS_BILLING_ENFORCEMENT_ENABLED = originalBillingEnforcement
-		}
+		const newTaskId = uuidv7()
+		await expect(
+			call(createTaskProcedure, { id: newTaskId, name: 'New work' }, { context: makeContext() }),
+		).resolves.toMatchObject({ task: { id: newTaskId } })
+		expect(await db.select().from(tasks).where(eq(tasks.id, newTaskId))).toHaveLength(1)
 	})
 
 	test('replaying a launched provider task converges before a second provider failure', async () => {

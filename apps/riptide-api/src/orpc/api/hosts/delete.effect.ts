@@ -8,7 +8,7 @@ import { Clock, Data, Effect } from 'effect'
 import { mapPostgresErrorToResponse } from '../../../effects/services/postgres/error-mapping'
 import { PostgresDb } from '../../../effects/services/postgres/postgres-db.service'
 import { Sentry } from '../../../instrument'
-import { effectOrpcBaseOrganizationRequired, requiresBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcBaseOrganizationRequired } from '../../effect-base'
 
 export interface DeleteHostRegistrationInput {
 	readonly hostId: string
@@ -86,19 +86,21 @@ export const deleteHostRegistration = Effect.fn('hosts.delete')(function* (input
 		)
 })
 
-export const deleteHostEffectProcedure = effectOrpcBaseOrganizationRequired.hosts.delete
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
-		return yield* deleteHostRegistration({
-			hostId: input.hostId,
-			organizationId: context.auth.organizationId,
-			userId: context.auth.userId,
-		}).pipe(
-			Effect.catchTags({
-				HostRegistrationNotFound: () => Effect.fail(errors.NOT_FOUND()),
-				HostRegistrationNotEligible: () => Effect.fail(errors.BAD_REQUEST({ data: {} })),
-				PostgresDbQueryError: (error) => mapPostgresErrorToResponse(error, errors),
-				PostgresDbTransactionError: (error) => mapPostgresErrorToResponse(error, errors),
-			}),
-		)
-	})
+export const deleteHostEffectProcedure = effectOrpcBaseOrganizationRequired.hosts.delete.effect(function* ({
+	input,
+	context,
+	errors,
+}) {
+	return yield* deleteHostRegistration({
+		hostId: input.hostId,
+		organizationId: context.auth.organizationId,
+		userId: context.auth.userId,
+	}).pipe(
+		Effect.catchTags({
+			HostRegistrationNotFound: () => Effect.fail(errors.NOT_FOUND()),
+			HostRegistrationNotEligible: () => Effect.fail(errors.BAD_REQUEST({ data: {} })),
+			PostgresDbQueryError: (error) => mapPostgresErrorToResponse(error, errors),
+			PostgresDbTransactionError: (error) => mapPostgresErrorToResponse(error, errors),
+		}),
+	)
+})

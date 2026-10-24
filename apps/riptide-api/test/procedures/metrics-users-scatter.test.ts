@@ -705,33 +705,26 @@ describe('metrics/usersScatter', async () => {
 		expect(otherOrgResult.data.find((d) => d.userId === usageOnlyUser)).toBeUndefined()
 	})
 
-	test('is forbidden when the org is not entitled by billing — even for an admin', async () => {
+	test('returns metrics to an administrator without billing state', async () => {
 		const [unbilledOrg] = await db
 			.insert(organizations)
 			.values({ name: 'Unbilled Metrics Org', workos_organization_id: `workos-org-${randomUUID()}` })
 			.returning()
 		if (!unbilledOrg) throw new Error('Unable to insert organization for setup')
 
-		// The suite runs with enforcement off, which makes every org entitled. Turn it on for this
-		// one call so the gate is actually exercised rather than short-circuited.
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			await expect(
-				call(apiRouter.metrics.usersScatter, metricsRange(), {
-					context: createMockApiContext({
-						auth: createMockApiAuth({
-							userId: 'user_admin_scatter',
-							organizationId: unbilledOrg.id,
-							workosOrganizationId: 'workos-org-scatter',
-							role: 'admin',
-						}),
-						services: { db, dbReadReplica: db },
+		await expect(
+			call(apiRouter.metrics.usersScatter, metricsRange(), {
+				context: createMockApiContext({
+					auth: createMockApiAuth({
+						userId: 'user_admin_scatter',
+						organizationId: unbilledOrg.id,
+						workosOrganizationId: 'workos-org-scatter',
+						role: 'admin',
 					}),
+					services: { db, dbReadReplica: db },
 				}),
-			).rejects.toMatchObject({ code: 'FORBIDDEN' })
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
+			}),
+		).resolves.toMatchObject({ data: [] })
 	})
 
 	test('non-admin members are forbidden — efficiency/ROI metrics are admin-only', async () => {
@@ -984,7 +977,7 @@ describe('metrics/usersScatter', async () => {
 		}
 	})
 
-	test('the weekly endpoints are forbidden for orgs not entitled by billing', async () => {
+	test('the weekly endpoints accept administrators without billing state', async () => {
 		const [unbilledOrg] = await db
 			.insert(organizations)
 			.values({ name: 'Unbilled Weekly Metrics Org', workos_organization_id: `workos-org-${randomUUID()}` })
@@ -1002,22 +995,13 @@ describe('metrics/usersScatter', async () => {
 			}),
 		}
 
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			await expect(call(apiRouter.metrics.unitCostTrend, metricsRange(), context)).rejects.toMatchObject({
-				code: 'FORBIDDEN',
-			})
-			await expect(call(apiRouter.metrics.modelSpendTrend, metricsRange(), context)).rejects.toMatchObject({
-				code: 'FORBIDDEN',
-			})
-			await expect(call(apiRouter.metrics.agentCommitsByRepo, metricsRange(), context)).rejects.toMatchObject({
-				code: 'FORBIDDEN',
-			})
-			await expect(call(apiRouter.metrics.costPerKlocByModel, metricsRange(), context)).rejects.toMatchObject({
-				code: 'FORBIDDEN',
-			})
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'false'
-		}
+		await expect(call(apiRouter.metrics.unitCostTrend, metricsRange(), context)).resolves.toHaveProperty('data')
+		await expect(call(apiRouter.metrics.modelSpendTrend, metricsRange(), context)).resolves.toHaveProperty('data')
+		await expect(call(apiRouter.metrics.agentCommitsByRepo, metricsRange(), context)).resolves.toHaveProperty(
+			'data',
+		)
+		await expect(call(apiRouter.metrics.costPerKlocByModel, metricsRange(), context)).resolves.toHaveProperty(
+			'data',
+		)
 	})
 })

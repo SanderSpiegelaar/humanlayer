@@ -17,7 +17,7 @@ import { getProjectV2Procedure as liveGetProject } from '../../src/orpc/api/proj
 import { listProjectsV2Procedure as liveListProjects } from '../../src/orpc/api/projects-v2/list.effect'
 import { upsertProjectV2LocationProcedure as liveUpsertProjectLocation } from '../../src/orpc/api/projects-v2/location-upsert.effect'
 import { updateProjectV2Procedure as liveUpdateProject } from '../../src/orpc/api/projects-v2/update.effect'
-import { createMockApiContext, createMockStripeService, createMockWorkosService } from '../mocks'
+import { createMockApiContext, createMockWorkosService } from '../mocks'
 import { bindProcedureToRuntime, createRuntimeWithTestPostgresLayer } from '../utils/effect-procedure-test-runtime'
 import { requireExternalTestServices } from '../utils/external-test-services'
 import { createTestDb } from '../utils/test-db'
@@ -46,7 +46,6 @@ describe('projects v2', () => {
 
 	const services = {
 		workos: createMockWorkosService(),
-		stripe: createMockStripeService(),
 		get db() {
 			return db
 		},
@@ -93,7 +92,6 @@ describe('projects v2', () => {
 			role: '',
 			roles: [] as string[],
 			permissions: [] as string[],
-			entitlements: [] as string[],
 			sessionId: 'session',
 		}
 		return { organizationId, userId, hostId, context: createMockApiContext({ auth, services }) }
@@ -259,7 +257,6 @@ describe('projects v2', () => {
 				role: '',
 				roles: [],
 				permissions: [],
-				entitlements: [],
 				sessionId: 'session',
 			},
 			services,
@@ -293,7 +290,6 @@ describe('projects v2', () => {
 				role: '',
 				roles: [],
 				permissions: [],
-				entitlements: [],
 				sessionId: 'session',
 			},
 			services,

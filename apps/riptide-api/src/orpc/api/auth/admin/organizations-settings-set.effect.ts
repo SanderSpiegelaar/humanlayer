@@ -4,7 +4,6 @@ import { organizations } from '@humanlayer/db/tables/organizations'
 import { and, eq } from 'drizzle-orm'
 import { Clock, Effect } from 'effect'
 
-import { Entitlements } from '../../../../effects/services/billing/entitlements.service'
 import { hasActiveInstalledRepository } from '../../../../effects/services/github/github.persistence'
 import { mapPostgresErrorToResponse } from '../../../../effects/services/postgres/error-mapping'
 import { PostgresDb } from '../../../../effects/services/postgres/postgres-db.service'
@@ -18,7 +17,6 @@ export const setOrgSettingsEffectProcedure =
 		errors,
 	}) {
 		const postgres = yield* PostgresDb
-		const entitlements = yield* Entitlements
 		const { organizationId } = context.auth
 		const updatedAt = BigInt(yield* Clock.currentTimeMillis)
 
@@ -52,27 +50,6 @@ export const setOrgSettingsEffectProcedure =
 		}
 		if (input.accessRequestsEnabled !== undefined) {
 			updateSet.access_requests_enabled = input.accessRequestsEnabled
-		}
-		// Only turning any of them on needs the entitlement. Daemons keep collecting regardless of
-		// billing and the audience gate honours a stored flag the moment the entitlement check fails
-		// open, so a lapsed org must still be able to turn them all off.
-		const entitledSwitches: ReadonlyArray<{ readonly enabled: boolean | undefined; readonly name: string }> = [
-			{ enabled: input.commitTrackingEnabled, name: 'Commit tracking' },
-			{ enabled: input.prTrackingEnabled, name: 'Pull request tracking' },
-			{
-				enabled: input.advancedMetricsVisibleToAllMembers,
-				name: 'Sharing Advanced metrics with every member',
-			},
-		]
-		const switchTurningOn = entitledSwitches.find((entitled) => entitled.enabled === true)
-		if (switchTurningOn !== undefined) {
-			if (!(yield* entitlements.hasFeature(organizationId, 'advancedMetrics'))) {
-				return yield* Effect.fail(
-					errors.METRICS_BILLING_REQUIRED({
-						data: { message: `${switchTurningOn.name} needs a Pro or Enterprise plan.` },
-					}),
-				)
-			}
 		}
 		if (input.commitTrackingEnabled !== undefined) {
 			updateSet.commit_tracking_enabled = input.commitTrackingEnabled

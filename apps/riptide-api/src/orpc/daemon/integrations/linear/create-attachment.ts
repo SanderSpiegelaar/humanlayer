@@ -1,11 +1,10 @@
 import * as Sentry from '@sentry/node'
 
 import logger from '../../../../logger'
-import { daemonBase, requiresDaemonBillingMiddleware } from '../../../base'
+import { daemonBase } from '../../../base'
 
-export const createLinearAttachmentProcedure = daemonBase.integrations.linear.createAttachment
-	.use(requiresDaemonBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
+export const createLinearAttachmentProcedure = daemonBase.integrations.linear.createAttachment.handler(
+	async ({ input, context, errors }) => {
 		const { organizationId } = context.auth
 		const { linear } = context.services
 		try {
@@ -17,4 +16,5 @@ export const createLinearAttachmentProcedure = daemonBase.integrations.linear.cr
 				data: { message: error instanceof Error ? error.message : 'Failed to create Linear attachment' },
 			})
 		}
-	})
+	},
+)

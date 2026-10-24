@@ -18,7 +18,6 @@ const ALL_SECTIONS: SettingsSection[] = [
 	'agent',
 	'tips',
 	'experiments',
-	'billing',
 	'access-requests',
 	'users',
 	'daemons',
@@ -83,7 +82,7 @@ describe('navigateBackFromSettings', () => {
 describe('navigateWithinSettings', () => {
 	test('replaces the current settings history entry', () => {
 		const navigate = vi.fn() as unknown as NavigateFn
-		navigateWithinSettings(navigate, 'billing')
-		expect(navigate).toHaveBeenCalledWith({ to: SETTINGS_SECTION_PATHS.billing, replace: true })
+		navigateWithinSettings(navigate, 'users')
+		expect(navigate).toHaveBeenCalledWith({ to: SETTINGS_SECTION_PATHS.users, replace: true })
 	})
 })

@@ -19,15 +19,6 @@ export const reactivateAdminUserContract = contractBuilder
 			status: StatusCodes.NOT_FOUND,
 			data: z.object({ message: z.string() }),
 		},
-		CAPACITY_EXCEEDED: {
-			status: StatusCodes.BAD_REQUEST,
-			data: z.object({
-				message: z.string(),
-				currentActiveSeats: z.number(),
-				pendingInvitations: z.number(),
-				freeCapacity: z.number(),
-			}),
-		},
 		INVALID_STATE: {
 			status: StatusCodes.BAD_REQUEST,
 			data: z.object({ message: z.string() }),

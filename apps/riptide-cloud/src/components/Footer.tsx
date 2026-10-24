@@ -4,7 +4,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@human
 import { Settings } from 'lucide-react'
 import type { FC } from 'react'
 
-import { BillingFooterIndicators } from '@/components/BillingFooterIndicators'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { useSettingsStore } from '@/hooks/stores/settingsStore'
 import { useIsSyncing } from '@/hooks/useIsSyncing'
@@ -20,7 +19,6 @@ export const Footer: FC = () => {
 				<div className="flex items-center justify-between px-4 py-2">
 					<div className="flex items-center gap-2 text-xs text-muted-foreground font-mono uppercase tracking-wider">
 						HumanLayer Cloud
-						<BillingFooterIndicators />
 						{isSyncing && (
 							<SyncGridAnimation
 								variant="snake"

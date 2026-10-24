@@ -12,7 +12,7 @@ describe('handleRiptideApiError UNAUTHORIZED', () => {
 	it('shows nothing and stays on the page', () => {
 		const navigate = vi.fn()
 
-		handleRiptideApiError(new ORPCError('UNAUTHORIZED'), undefined, { navigate, isOnOrgPages: false, roles: null })
+		handleRiptideApiError(new ORPCError('UNAUTHORIZED'), undefined, { navigate, isOnOrgPages: false })
 
 		expect(toast.warning).not.toHaveBeenCalled()
 		expect(toast.error).not.toHaveBeenCalled()

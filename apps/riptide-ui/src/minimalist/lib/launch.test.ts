@@ -101,8 +101,7 @@ describe('launchError', () => {
 		expect(launchError(error)).toBe(`Could not start the task. The name "fix-auth" is taken. ${kept}`)
 	})
 
-	it('says what to do about billing and access', () => {
-		expect(launchError(new ORPCError('BILLING_REQUIRED', { status: 402 }))).toContain('Settings → Billing')
+	it('explains when the account cannot start tasks', () => {
 		expect(launchError(new ORPCError('FORBIDDEN', { status: 403 }))).toContain("can't start tasks here")
 	})
 

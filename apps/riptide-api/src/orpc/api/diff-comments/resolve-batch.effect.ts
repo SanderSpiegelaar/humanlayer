@@ -1,11 +1,10 @@
 import { Effect } from 'effect'
 
 import { DiffComments } from '../../../effects/services/diff-comments/diff-comments'
-import { effectOrpcBaseOrganizationRequired, requiresBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcBaseOrganizationRequired } from '../../effect-base'
 
-export const resolveBatchDiffCommentsProcedure = effectOrpcBaseOrganizationRequired.diffComments.resolveBatch
-	.use(requiresBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const resolveBatchDiffCommentsProcedure = effectOrpcBaseOrganizationRequired.diffComments.resolveBatch.effect(
+	function* ({ input, context, errors }) {
 		const diffComments = yield* DiffComments
 		const { organizationId, userId } = context.auth
 		return yield* diffComments
@@ -27,4 +26,5 @@ export const resolveBatchDiffCommentsProcedure = effectOrpcBaseOrganizationRequi
 						Effect.fail(error.retryable ? errors.SERVICE_UNAVAILABLE() : errors.INTERNAL_SERVER_ERROR()),
 				}),
 			)
-	})
+	},
+)

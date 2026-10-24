@@ -1,10 +1,8 @@
 import { describe, expect, test } from 'vitest'
 
 import { summarizeResendSuppression, type ResendWebhookDeps } from '../../src/webhooks/resend'
-import { createMockStripeService, createMockWorkosService } from '../mocks'
+import { createMockWorkosService } from '../mocks'
 import { createApp } from '../test-factory'
-
-const noopStripeService = createMockStripeService()
 
 function createResendTestApp(input?: { verifyError?: Error }) {
 	const verifyCalls: Array<{
@@ -50,7 +48,6 @@ function createResendTestApp(input?: { verifyError?: Error }) {
 	const app = createApp({
 		db: {} as any,
 		workos: createMockWorkosService(),
-		stripe: noopStripeService,
 		resendWebhook,
 	})
 

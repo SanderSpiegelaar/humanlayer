@@ -9,7 +9,7 @@ import type z from 'zod/v4'
 import { mapPostgresErrorToResponse } from '../../../effects/services/postgres/error-mapping'
 import { PostgresDb } from '../../../effects/services/postgres/postgres-db.service'
 import { Sentry } from '../../../instrument'
-import { effectOrpcDaemonBase, requiresDaemonBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcDaemonBase } from '../../effect-base'
 
 type ObservedCommit = z.infer<typeof ObservedCommitSchema>
 
@@ -81,130 +81,132 @@ function attributionColumns(
  * Idempotent on (organization_id, commit_sha): replays insert nothing for SHAs
  * already recorded and return only the newly-inserted count. Rows are insert-only.
  */
-export const recordObservedCommitsProcedure = effectOrpcDaemonBase.commits.recordObserved
-	.use(requiresDaemonBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
-		const postgres = yield* PostgresDb
-		const { userId, organizationId, hostId } = context.auth
+export const recordObservedCommitsProcedure = effectOrpcDaemonBase.commits.recordObserved.effect(function* ({
+	input,
+	context,
+	errors,
+}) {
+	const postgres = yield* PostgresDb
+	const { userId, organizationId, hostId } = context.auth
 
-		const result = yield* postgres
-			.transaction((tx) =>
-				Effect.gen(function* () {
-					// 1. Resolve the sessions referenced by attributed commits in one query,
-					// scoped to the auth org. Human commits carry no session and are skipped here.
-					const attributedSessionIds = [
-						...new Set(
-							input.commits
-								.map((commit) => commit.attributedSessionId)
-								.filter((id): id is string => id !== undefined),
-						),
-					]
-
-					const sessionRows = attributedSessionIds.length
-						? yield* tx.query(
-								tx.client
-									.select({
-										id: sessions.id,
-										task_id: sessions.task_id,
-										resource_owner_user_id: sessions.resource_owner_user_id,
-										coding_agent: sessions.coding_agent,
-										organization_id: sessions.organization_id,
-									})
-									.from(sessions)
-									.where(
-										and(
-											inArray(sessions.id, attributedSessionIds),
-											eq(sessions.organization_id, organizationId),
-											eq(sessions.created_by, userId),
-											eq(sessions.host_id, hostId),
-										),
-									)
-									.for('no key update'),
-							)
-						: []
-
-					const sessionById = new Map(sessionRows.map((s) => [s.id, s]))
-
-					// A claimed session that didn't resolve here means the commit lands
-					// unattributed (see attributionColumns) — never a batch failure, which
-					// would wedge the caller's watermark loop. Counted for observability.
-					const downgraded = input.commits.filter(
-						(commit) =>
-							commit.attributedSessionId !== undefined && !sessionById.has(commit.attributedSessionId),
-					).length
-
-					// 2. Idempotent batch insert, one row per observed SHA
-					const inserted = yield* tx.query(
-						tx.client
-							.insert(commits)
-							.values(
-								input.commits.map((commit) => {
-									return {
-										organization_id: organizationId,
-										...attributionColumns(commit, sessionById, userId),
-										commit_sha: commit.sha,
-										parent_shas: commit.parentShas,
-										branch: commit.branch,
-										repo_remote_url: commit.repoRemoteUrl,
-										// Lowercased server-side to match pull_requests.repo_full_name (also
-										// lowercased in the PR upsert); GitHub owner/repo is case-insensitive,
-										// so the documented commits<->pull_requests join must agree on casing.
-										repo_full_name: commit.repoFullName?.toLowerCase(),
-										repo_directory: commit.repoDirectory,
-										subject: commit.subject,
-										body: commit.body,
-										author_name: commit.authorName,
-										author_email: commit.authorEmail,
-										authored_at:
-											commit.authoredAt !== undefined ? BigInt(commit.authoredAt) : undefined,
-										committed_at: BigInt(commit.committedAt),
-										additions: commit.additions,
-										deletions: commit.deletions,
-										files_changed: commit.filesChanged,
-										file_stats: commit.fileStats,
-										co_authored_by_agent: commit.coAuthoredByAgent,
-										capture_algorithm_version: commit.captureAlgorithmVersion,
-										change_id: commit.changeId,
-										is_primary_branch: commit.isPrimaryBranch,
-										author_matches_daemon_user: commit.authorMatchesDaemonUser,
-										// The matcher that produced the (possibly downgraded) verdict,
-										// versioned independently of capture.
-										attribution_algorithm_version: commit.attributionAlgorithmVersion,
-									}
-								}),
-							)
-							.onConflictDoNothing({ target: [commits.organization_id, commits.commit_sha] })
-							.returning({ id: commits.id }),
-					)
-
-					return { recorded: inserted.length, downgraded }
-				}),
-			)
-			.pipe(
-				Effect.tap(({ downgraded }) =>
-					downgraded > 0
-						? Effect.logWarning(
-								'Observed commits referenced unresolvable sessions; downgraded to human',
-							).pipe(Effect.annotateLogs({ organizationId, downgraded }))
-						: Effect.void,
-				),
-				Effect.tap((result) =>
-					Effect.logInfo('Observed commits recorded').pipe(
-						Effect.annotateLogs({
-							organizationId,
-							observed: input.commits.length,
-							recorded: result.recorded,
-						}),
+	const result = yield* postgres
+		.transaction((tx) =>
+			Effect.gen(function* () {
+				// 1. Resolve the sessions referenced by attributed commits in one query,
+				// scoped to the auth org. Human commits carry no session and are skipped here.
+				const attributedSessionIds = [
+					...new Set(
+						input.commits
+							.map((commit) => commit.attributedSessionId)
+							.filter((id): id is string => id !== undefined),
 					),
-				),
-				Effect.tapError((e) => Effect.logError(e)),
-				Effect.tapError((e) => Effect.sync(() => Sentry.captureException(e))),
-				Effect.catchTags({
-					PostgresDbQueryError: (error) => mapPostgresErrorToResponse(error, errors),
-					PostgresDbTransactionError: (error) => mapPostgresErrorToResponse(error, errors),
-				}),
-			)
+				]
 
-		// `downgraded` is observability-only (logged above) — the contract returns the count.
-		return { recorded: result.recorded }
-	})
+				const sessionRows = attributedSessionIds.length
+					? yield* tx.query(
+							tx.client
+								.select({
+									id: sessions.id,
+									task_id: sessions.task_id,
+									resource_owner_user_id: sessions.resource_owner_user_id,
+									coding_agent: sessions.coding_agent,
+									organization_id: sessions.organization_id,
+								})
+								.from(sessions)
+								.where(
+									and(
+										inArray(sessions.id, attributedSessionIds),
+										eq(sessions.organization_id, organizationId),
+										eq(sessions.created_by, userId),
+										eq(sessions.host_id, hostId),
+									),
+								)
+								.for('no key update'),
+						)
+					: []
+
+				const sessionById = new Map(sessionRows.map((s) => [s.id, s]))
+
+				// A claimed session that didn't resolve here means the commit lands
+				// unattributed (see attributionColumns) — never a batch failure, which
+				// would wedge the caller's watermark loop. Counted for observability.
+				const downgraded = input.commits.filter(
+					(commit) =>
+						commit.attributedSessionId !== undefined && !sessionById.has(commit.attributedSessionId),
+				).length
+
+				// 2. Idempotent batch insert, one row per observed SHA
+				const inserted = yield* tx.query(
+					tx.client
+						.insert(commits)
+						.values(
+							input.commits.map((commit) => {
+								return {
+									organization_id: organizationId,
+									...attributionColumns(commit, sessionById, userId),
+									commit_sha: commit.sha,
+									parent_shas: commit.parentShas,
+									branch: commit.branch,
+									repo_remote_url: commit.repoRemoteUrl,
+									// Lowercased server-side to match pull_requests.repo_full_name (also
+									// lowercased in the PR upsert); GitHub owner/repo is case-insensitive,
+									// so the documented commits<->pull_requests join must agree on casing.
+									repo_full_name: commit.repoFullName?.toLowerCase(),
+									repo_directory: commit.repoDirectory,
+									subject: commit.subject,
+									body: commit.body,
+									author_name: commit.authorName,
+									author_email: commit.authorEmail,
+									authored_at:
+										commit.authoredAt !== undefined ? BigInt(commit.authoredAt) : undefined,
+									committed_at: BigInt(commit.committedAt),
+									additions: commit.additions,
+									deletions: commit.deletions,
+									files_changed: commit.filesChanged,
+									file_stats: commit.fileStats,
+									co_authored_by_agent: commit.coAuthoredByAgent,
+									capture_algorithm_version: commit.captureAlgorithmVersion,
+									change_id: commit.changeId,
+									is_primary_branch: commit.isPrimaryBranch,
+									author_matches_daemon_user: commit.authorMatchesDaemonUser,
+									// The matcher that produced the (possibly downgraded) verdict,
+									// versioned independently of capture.
+									attribution_algorithm_version: commit.attributionAlgorithmVersion,
+								}
+							}),
+						)
+						.onConflictDoNothing({ target: [commits.organization_id, commits.commit_sha] })
+						.returning({ id: commits.id }),
+				)
+
+				return { recorded: inserted.length, downgraded }
+			}),
+		)
+		.pipe(
+			Effect.tap(({ downgraded }) =>
+				downgraded > 0
+					? Effect.logWarning('Observed commits referenced unresolvable sessions; downgraded to human').pipe(
+							Effect.annotateLogs({ organizationId, downgraded }),
+						)
+					: Effect.void,
+			),
+			Effect.tap((result) =>
+				Effect.logInfo('Observed commits recorded').pipe(
+					Effect.annotateLogs({
+						organizationId,
+						observed: input.commits.length,
+						recorded: result.recorded,
+					}),
+				),
+			),
+			Effect.tapError((e) => Effect.logError(e)),
+			Effect.tapError((e) => Effect.sync(() => Sentry.captureException(e))),
+			Effect.catchTags({
+				PostgresDbQueryError: (error) => mapPostgresErrorToResponse(error, errors),
+				PostgresDbTransactionError: (error) => mapPostgresErrorToResponse(error, errors),
+			}),
+		)
+
+	// `downgraded` is observability-only (logged above) — the contract returns the count.
+	return { recorded: result.recorded }
+})

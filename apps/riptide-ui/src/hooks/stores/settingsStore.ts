@@ -113,9 +113,6 @@ interface SettingsState {
 	// Coding-agent setup-dialog acknowledgements, scoped to daemon host and auth variant (persisted).
 	codingAgentSetupAcknowledgements: CodingAgentSetupAcknowledgements
 
-	// Billing preview toggle - admin-only, local-only (persisted)
-	billingPreviewEnabled: boolean
-
 	// Collaborative diff viewer experiment - local-only (persisted)
 	diffViewerEnabled: boolean
 
@@ -213,7 +210,6 @@ interface SettingsState {
 	setExperimentalSubagentsEnabled: (enabled: boolean) => void
 	setHaikuResearchSubagentsEnabled: (enabled: boolean) => void
 	setWorkflowGraphEnabled: (enabled: boolean) => void
-	setBillingPreviewEnabled: (enabled: boolean) => void
 	setDiffViewerEnabled: (enabled: boolean) => void
 	setScratchPadEnabled: (enabled: boolean) => void
 	setGithubPrPanelEnabled: (enabled: boolean) => void
@@ -370,7 +366,6 @@ type PersistedSettingsState = Omit<
 			| 'launcherV3AutoAdvance'
 			| 'workflowGraphEnabled'
 			| 'codingAgentSetupAcknowledgements'
-			| 'billingPreviewEnabled'
 			| 'diffViewerEnabled'
 			| 'scratchPadEnabled'
 			| 'githubPrPanelEnabled'
@@ -644,6 +639,7 @@ export function migrateSettingsState(persistedState: unknown, version: number): 
 	delete legacyPromptFirst.promptFirstTaskCreationAssignment
 	delete legacyPromptFirst.promptFirstTaskCreationAssignments
 	delete legacyPromptFirst.promptFirstTaskCreationOverride
+	if ('billingPreviewEnabled' in nextState) delete nextState.billingPreviewEnabled
 
 	return nextState
 }
@@ -710,7 +706,6 @@ export const useSettingsStore = create<SettingsState>()(
 			launcherV3AutoAdvance: true,
 			workflowGraphEnabled: true,
 			codingAgentSetupAcknowledgements: {},
-			billingPreviewEnabled: false,
 			diffViewerEnabled: true,
 			scratchPadEnabled: false,
 			githubPrPanelEnabled: false,
@@ -776,7 +771,6 @@ export const useSettingsStore = create<SettingsState>()(
 			setExperimentalSubagentsEnabled: (enabled) => set({ experimentalSubagentsEnabled: enabled }),
 			setHaikuResearchSubagentsEnabled: (enabled) => set({ haikuResearchSubagentsEnabled: enabled }),
 			setWorkflowGraphEnabled: (enabled) => set({ workflowGraphEnabled: enabled }),
-			setBillingPreviewEnabled: (enabled) => set({ billingPreviewEnabled: enabled }),
 			setDiffViewerEnabled: (enabled) => set({ diffViewerEnabled: enabled }),
 			setScratchPadEnabled: (enabled) => set({ scratchPadEnabled: enabled }),
 			setGithubPrPanelEnabled: (enabled) => set({ githubPrPanelEnabled: enabled }),
@@ -893,7 +887,7 @@ export const useSettingsStore = create<SettingsState>()(
 		}),
 		{
 			name: SETTINGS_STORAGE_KEY,
-			version: 40,
+			version: 41,
 			migrate: migrateSettingsState,
 			// Persist user preferences
 			partialize: (state) => ({
@@ -942,7 +936,6 @@ export const useSettingsStore = create<SettingsState>()(
 				launcherV3AutoAdvance: state.launcherV3AutoAdvance,
 				workflowGraphEnabled: state.workflowGraphEnabled,
 				codingAgentSetupAcknowledgements: state.codingAgentSetupAcknowledgements,
-				billingPreviewEnabled: state.billingPreviewEnabled,
 				diffViewerEnabled: state.diffViewerEnabled,
 				scratchPadEnabled: state.scratchPadEnabled,
 				githubPrPanelEnabled: state.githubPrPanelEnabled,

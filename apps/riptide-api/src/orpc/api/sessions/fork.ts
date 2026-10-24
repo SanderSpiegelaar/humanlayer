@@ -23,7 +23,7 @@ import { checkSessionWritePermission } from '../../../db/task-auth'
 import { tryEnsureSessionStreamHydrated } from '../../../effects/services/durable-streams/streams'
 import { Sentry } from '../../../instrument'
 import logger from '../../../logger'
-import { type ApiContext, apiBaseOrgRequired, requiresBillingMiddleware } from '../../base'
+import { type ApiContext, apiBaseOrgRequired } from '../../base'
 
 type SessionRow = InferSelectModel<typeof sessions>
 type ConversationEventRow = InferSelectModel<typeof conversationEvents>
@@ -635,21 +635,18 @@ async function runForkTransaction({
 	return { transactionId: txResult.txid, session: txResult.session }
 }
 
-export const forkSessionProcedure = apiBaseOrgRequired.sessions.fork
-	.use(requiresBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
-		try {
-			return await runForkTransaction({ input, context, errors, codingAgent: 'claude' })
-		} catch (error: unknown) {
-			if (error instanceof ORPCError) throw error
-			logger.error(error, 'Failed to fork session')
-			throw errors.INTERNAL_SERVER_ERROR({})
-		}
-	})
+export const forkSessionProcedure = apiBaseOrgRequired.sessions.fork.handler(async ({ input, context, errors }) => {
+	try {
+		return await runForkTransaction({ input, context, errors, codingAgent: 'claude' })
+	} catch (error: unknown) {
+		if (error instanceof ORPCError) throw error
+		logger.error(error, 'Failed to fork session')
+		throw errors.INTERNAL_SERVER_ERROR({})
+	}
+})
 
-export const forkSessionV2Procedure = apiBaseOrgRequired.sessions.v2.fork
-	.use(requiresBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
+export const forkSessionV2Procedure = apiBaseOrgRequired.sessions.v2.fork.handler(
+	async ({ input, context, errors }) => {
 		try {
 			const { codingAgent, ...forkInput } = input
 			return await runForkTransaction({ input: forkInput, context, errors, codingAgent })
@@ -658,4 +655,5 @@ export const forkSessionV2Procedure = apiBaseOrgRequired.sessions.v2.fork
 			logger.error(error, 'Failed to fork session')
 			throw errors.INTERNAL_SERVER_ERROR({})
 		}
-	})
+	},
+)

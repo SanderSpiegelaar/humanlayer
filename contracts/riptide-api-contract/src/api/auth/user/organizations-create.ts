@@ -1,4 +1,3 @@
-import { stripeCustomerIdSchema as StripeCustomerIdSchema } from '@humanlayer/db/tables/organizations'
 import z from 'zod/v4'
 
 import { contractBuilder } from '../../../contract-builder'
@@ -16,7 +15,6 @@ export const CreateOrganizationOutputSchema = z.object({
 	organizationId: z.string(),
 	workosOrganizationId: z.string(),
 	organizationName: z.string(),
-	stripeCustomerId: StripeCustomerIdSchema.optional(),
 	failedInvites: z.array(z.string()).default([]),
 })
 

@@ -3,7 +3,6 @@ import { useNavigate } from '@tanstack/react-router'
 import { useSettingsStore } from '@/hooks/stores/settingsStore'
 import { useBrowserAuth } from '@/hooks/use-browser-auth'
 import { useMountEffect } from '@/hooks/useMountEffect'
-import { buildConfig } from '@/lib/config'
 
 /**
  * The settings sections. These map 1:1 to the static route files under
@@ -18,7 +17,6 @@ export type SettingsSection =
 	| 'experiments'
 	| 'projects'
 	| 'personal-access-tokens'
-	| 'billing'
 	| 'access-requests'
 	| 'users'
 	| 'daemons'
@@ -38,7 +36,6 @@ export const SETTINGS_SECTION_PATHS = {
 	experiments: '/settings/experiments',
 	projects: '/settings/projects',
 	'personal-access-tokens': '/settings/personal-access-tokens',
-	billing: '/settings/billing',
 	'access-requests': '/settings/access-requests',
 	users: '/settings/users',
 	daemons: '/settings/daemons',
@@ -56,7 +53,6 @@ export const SETTINGS_SECTION_LABELS = {
 	experiments: 'Experiments',
 	projects: 'Projects',
 	'personal-access-tokens': 'Personal access tokens',
-	billing: 'Billing',
 	'access-requests': 'Access requests',
 	users: 'Users',
 	daemons: 'Hosts',
@@ -83,37 +79,15 @@ export function shouldSuppressSettingsSectionTitle(section: string | undefined):
 	return section === 'access-requests'
 }
 
-/**
- * Context required to evaluate which conditional sections are visible.
- * Mirrors the gates the modal applied: Billing depends on the build flag or an
- * admin opting into the local preview toggle.
- */
 export interface SettingsVisibilityContext {
 	/** WorkOS roles for the current user (from `useBrowserAuth().roles`). */
 	roles: string[] | null | undefined
-	/** Local admin-only billing preview toggle (`settingsStore.billingPreviewEnabled`). */
-	billingPreviewEnabled: boolean
 	projectsV2Enabled?: boolean
-}
-
-/**
- * Whether the Billing section is visible.
- *
- * Matches the modal's `showBillingTab` rule exactly: visible when billing
- * enforcement is enabled in the build, or when an admin has enabled the local
- * billing preview toggle.
- */
-export function isBillingSectionVisible(context: SettingsVisibilityContext): boolean {
-	return (
-		buildConfig.billingEnforcementEnabled || (!!context.roles?.includes('admin') && context.billingPreviewEnabled)
-	)
 }
 
 /** Whether a section is visible for the current user/context. */
 export function isSettingsSectionVisible(section: SettingsSection, context: SettingsVisibilityContext): boolean {
 	switch (section) {
-		case 'billing':
-			return isBillingSectionVisible(context)
 		case 'projects':
 			return context.projectsV2Enabled === true
 		case 'access-requests':
@@ -130,9 +104,8 @@ export function isSettingsSectionVisible(section: SettingsSection, context: Sett
  */
 export function useSettingsVisibilityContext(): SettingsVisibilityContext {
 	const { roles } = useBrowserAuth()
-	const billingPreviewEnabled = useSettingsStore((s) => s.billingPreviewEnabled)
 	const projectsV2Enabled = useSettingsStore((s) => s.projectsV2Enabled)
-	return { roles, billingPreviewEnabled, projectsV2Enabled }
+	return { roles, projectsV2Enabled }
 }
 
 export interface SettingsSectionGroup {
@@ -141,31 +114,14 @@ export interface SettingsSectionGroup {
 	sections: SettingsSection[]
 }
 
-/**
- * Grouped section layout for the settings nav:
- * top (ungrouped): General, Projects, Keybindings, Tips, Experiments
- * Coding agents: Sign-in, Defaults
- * Account: Personal access tokens, Billing
- * System: Hosts, Sync, Diagnostics, Updates
- */
 export const SETTINGS_SECTION_GROUPS: SettingsSectionGroup[] = [
 	{ sections: ['general', 'projects', 'keybindings', 'tips', 'experiments'] },
 	{ label: 'Coding agents', sections: ['agent-sign-in', 'agent'] },
-	{ label: 'Account', sections: ['personal-access-tokens', 'billing'] },
+	{ label: 'Account', sections: ['personal-access-tokens'] },
 	{ label: 'Administration', sections: ['access-requests', 'users'] },
 	{ label: 'System', sections: ['daemons', 'sync', 'diagnostics', 'updates'] },
 ]
 
-/**
- * Redirect a gated section's route back to General when the section is not
- * visible for the current user/context.
- *
- * Used by the Billing and Agent route files so a cold-loaded deep link to a
- * gated-off section (e.g. `/settings/agent` with alternative agents disabled, or
- * `/settings/billing` when billing is hidden) lands on `/settings/general`. The
- * redirect uses the exact same visibility predicate the nav uses to hide the
- * item, so the route and nav can never disagree about what is reachable.
- */
 export function useRedirectIfSettingsSectionHidden(section: SettingsSection): void {
 	const navigate = useNavigate()
 	const context = useSettingsVisibilityContext()

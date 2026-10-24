@@ -1,5 +1,5 @@
 import { userSettings } from '@humanlayer/db/tables/user-settings'
-import { MembershipStatusSchema, type MembershipStatus } from '@humanlayer/riptide-api-contract/types/billing'
+import { MembershipStatusSchema, type MembershipStatus } from '@humanlayer/riptide-api-contract/types/membership'
 import type { OrganizationMembership, User } from '@workos-inc/node'
 import { eq } from 'drizzle-orm'
 import pLimit from 'p-limit'

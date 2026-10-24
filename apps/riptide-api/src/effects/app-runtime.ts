@@ -1,7 +1,4 @@
 import { NodeCrypto } from '@effect/platform-node'
-import { BillingKvService, BillingKvServiceLive } from '@humanlayer/billing/billing-kv'
-import { makeRedisLive, RedisService } from '@humanlayer/billing/redis'
-import type { RedisInitializationError } from '@humanlayer/billing/redis'
 import * as EffectSentry from '@sentry/effect/server'
 import { Config, Crypto, ManagedRuntime } from 'effect'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
@@ -15,11 +12,6 @@ import { WorkosServiceLive } from '../workos'
 import { type AccessRequestService, AccessRequestServiceLive } from './services/access-request/access-request.service'
 import type { ArtifactComments } from './services/artifact-comments/artifact-comments'
 import { ArtifactCommentsLive } from './services/artifact-comments/artifact-comments-live'
-import { BillingCheckoutCompletionServiceLive } from './services/billing-checkout-completion/billing-checkout-completion.live'
-import type { BillingCheckoutCompletionService } from './services/billing-checkout-completion/billing-checkout-completion.service'
-import { BillingAccessLive } from './services/billing/billing-access-service-live'
-import type { BillingAccess } from './services/billing/billing-access.service'
-import { type Entitlements, EntitlementsLive } from './services/billing/entitlements.service'
 import type { DiffComments } from './services/diff-comments/diff-comments'
 import { DiffCommentsLive } from './services/diff-comments/diff-comments-live'
 import {
@@ -50,9 +42,6 @@ import {
 	SessionTitleGenerationLive,
 } from './services/session-title-generation/session-title-generation.service'
 import { type SlackService, SlackServiceLive } from './services/slack/slack.service'
-import type { StripeHttpClient } from './services/stripe/stripe-http-client.service'
-import { StripeServiceWithFetchHttpClientLive } from './services/stripe/stripe-service-live'
-import type { StripeService } from './services/stripe/stripe.service'
 import {
 	type TaskDiffService,
 	TaskDiffServiceLive,
@@ -89,13 +78,6 @@ export type AppRuntimeServices =
 	| SlackService
 	| WorkspaceSetupService
 	| GitHubService
-	| StripeService
-	| StripeHttpClient
-	| BillingAccess
-	| Entitlements
-	| BillingCheckoutCompletionService
-	| BillingKvService
-	| RedisService
 	| ExperimentAnalyticsService
 	| DiffComments
 	| ArtifactComments
@@ -107,14 +89,9 @@ export type AppRuntimeServices =
 /**
  * The type for the actual runtime
  */
-export type AppRuntimeInitializationError = Config.ConfigError | RedisInitializationError
+export type AppRuntimeInitializationError = Config.ConfigError
 
 export type AppRuntime = ManagedRuntime.ManagedRuntime<AppRuntimeServices, AppRuntimeInitializationError>
-
-export type BillingKvRuntime = ManagedRuntime.ManagedRuntime<
-	BillingKvService | RedisService,
-	AppRuntimeInitializationError
->
 
 const isLocal = (process.env.SENTRY_ENVIRONMENT ?? 'local') === 'local'
 
@@ -135,10 +112,6 @@ export const SentryEffectLive = Layer.mergeAll(
 	EffectSentry.SentryEffectMetricsLayer,
 )
 
-const RedisLive = makeRedisLive().pipe(Layer.provide(SentryEffectLive))
-
-const BillingKvLive = BillingKvServiceLive.pipe(Layer.provideMerge(RedisLive))
-
 /**
  * The live app runtime layer tree.
  */
@@ -148,7 +121,6 @@ const BaseRuntimeLive = Layer.mergeAll(
 	PostgresDbLive(db),
 	PostgresReadReplicaDbLive(dbReadReplica),
 	S3Live,
-	BillingKvLive,
 	DurableStreamsConfigLive.pipe(Layer.orDie),
 	ResendConfigLive,
 )
@@ -164,7 +136,6 @@ const CoreServiceLive = Layer.mergeAll(
 	SlackServiceLive.pipe(Layer.orDie),
 	WorkspaceSetupServiceLive.pipe(Layer.provide(WorkspaceSetupPersistenceLive)),
 	GitHubServiceLive.pipe(Layer.orDie),
-	StripeServiceWithFetchHttpClientLive.pipe(Layer.orDie),
 	// Reads DURABLE_STREAMS_ORIGIN through DurableStreamsConfig, provided by BaseRuntimeLive below.
 	PrStatusStreamLive,
 ).pipe(Layer.provideMerge(BaseRuntimeLive))
@@ -177,11 +148,8 @@ const CommentServicesLive = Layer.mergeAll(DiffCommentsLive, ArtifactCommentsLiv
 
 export const AppRuntimeLive = Layer.mergeAll(
 	AccessRequestServiceLive,
-	BillingAccessLive,
-	EntitlementsLive,
 	PersonSpendAnalyticsLive,
 	OnboardingServiceWithDependenciesLive,
-	BillingCheckoutCompletionServiceLive.pipe(Layer.orDie),
 	ExperimentAnalyticsServiceLive.pipe(Layer.orDie),
 	TaskLaunchServiceLive,
 	TaskIntentClassifierLive,

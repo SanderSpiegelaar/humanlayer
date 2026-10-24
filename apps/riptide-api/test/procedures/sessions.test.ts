@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 
-import type { STRIPE_SUB_CACHE } from '@humanlayer/billing/types'
 import { onlineHosts } from '@humanlayer/db/tables/online-hosts'
 import { organizations } from '@humanlayer/db/tables/organizations'
 import { sessions } from '@humanlayer/db/tables/sessions'
@@ -15,12 +14,9 @@ import { and, eq } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
-import { BillingAccessLive } from '../../src/effects/services/billing/billing-access-service-live'
 import { launchSessionProcedure } from '../../src/orpc/api/sessions/launch'
 import type { Services } from '../../src/orpc/base'
-import { billingKvLayerFromTestService, TestBillingKvService } from '../fixtures/billing-kv-runtime'
 import { createMockApiAuth, createMockApiContext } from '../mocks'
-import { createDefaultTestEffectRuntime } from '../utils/effect-procedure-test-runtime'
 import { requireExternalTestServices } from '../utils/external-test-services'
 import { createTestDb } from '../utils/test-db'
 
@@ -76,21 +72,6 @@ describe('sessions.launch — task_user_settings upsert', async () => {
 			auth: createMockApiAuth({ userId, organizationId, workosOrganizationId }),
 			services: { db, dbReadReplica: db, ...serviceOverrides },
 		})
-	}
-
-	function subscriptionCache(status: STRIPE_SUB_CACHE['status']): STRIPE_SUB_CACHE {
-		return {
-			customerId: 'cus_sessions_launch',
-			organizationId,
-			subscriptionId: status === 'none' ? null : 'sub_sessions_launch',
-			status,
-			priceId: 'price_pro',
-			currentPeriodEnd: Date.now() + 86_400_000,
-			hasPaidInvoice: false,
-			hasPaymentMethod: true,
-			pastDueAt: null,
-			syncedAt: Date.now(),
-		}
 	}
 
 	async function createSharedTask(
@@ -811,68 +792,23 @@ describe('sessions.launch — task_user_settings upsert', async () => {
 		}
 	})
 
-	test('blocks sessions.launch with no billing mapping when enforcement is enabled', async () => {
-		const originalBillingEnforcement = process.env.IS_BILLING_ENFORCEMENT_ENABLED ?? 'false'
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			const kv = new TestBillingKvService()
-			const effectRuntime = createDefaultTestEffectRuntime({
-				billingKv: billingKvLayerFromTestService(kv),
-				billingAccess: BillingAccessLive,
-			})
-
-			await expect(
-				call(
-					launchSessionProcedure,
-					{
-						text: 'Blocked launch',
-						workingDirectory: tmpdir(),
-						hostId,
-						codingAgent: 'claude',
-						provider: 'anthropic',
-						model: 'claude-sonnet-4-5',
-						permissionsMode: 'default',
-					},
-					{ context: makeContext(ownerUserId, { effectRuntime }) },
-				),
-			).rejects.toMatchObject({ code: 'BILLING_REQUIRED' })
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = originalBillingEnforcement
-		}
-	})
-
-	test('allows sessions.launch with active and trialing billing cache when enforcement is enabled', async () => {
-		const originalBillingEnforcement = process.env.IS_BILLING_ENFORCEMENT_ENABLED ?? 'false'
-		process.env.IS_BILLING_ENFORCEMENT_ENABLED = 'true'
-		try {
-			for (const status of ['active', 'trialing'] as const) {
-				const kv = new TestBillingKvService()
-				await kv.setOrgCustomerId(organizationId, 'cus_sessions_launch')
-				await kv.setSubscriptionCache('cus_sessions_launch', subscriptionCache(status))
-				const effectRuntime = createDefaultTestEffectRuntime({
-					billingKv: billingKvLayerFromTestService(kv),
-					billingAccess: BillingAccessLive,
-				})
-
-				const result = await call(
-					launchSessionProcedure,
-					{
-						text: `Allowed ${status} launch`,
-						workingDirectory: tmpdir(),
-						hostId,
-						codingAgent: 'claude',
-						provider: 'anthropic',
-						model: 'claude-sonnet-4-5',
-						permissionsMode: 'default',
-					},
-					{ context: makeContext(ownerUserId, { effectRuntime }) },
-				)
-
-				expect(result.session.status).toBe('ready_for_launch')
-			}
-		} finally {
-			process.env.IS_BILLING_ENFORCEMENT_ENABLED = originalBillingEnforcement
-		}
+	test('launches a session without billing state', async () => {
+		const result = await call(
+			launchSessionProcedure,
+			{
+				text: 'Self-hosted launch',
+				workingDirectory: tmpdir(),
+				hostId,
+				codingAgent: 'claude',
+				provider: 'anthropic',
+				model: 'claude-sonnet-4-5',
+				permissionsMode: 'default',
+			},
+			{ context: makeContext(ownerUserId) },
+		)
+		expect(result.session.status).toBe('ready_for_launch')
+		const [stored] = await db.select().from(sessions).where(eq(sessions.id, result.session.id))
+		expect(stored?.status).toBe('ready_for_launch')
 	})
 
 	afterAll(async () => {

@@ -12,7 +12,6 @@ import { getArtifactVersionContract, listArtifactVersionsContract } from './api/
 import { archiveAccessRequestContract } from './api/auth/admin/access-requests/archive'
 import { listAccessRequestsContract } from './api/auth/admin/access-requests/list'
 import { unreadCountContract } from './api/auth/admin/access-requests/unread-count'
-import { billingInfoContract } from './api/auth/admin/billing-info'
 import { createAdminInvitationContract } from './api/auth/admin/invitations-create'
 import { listAdminInvitationsContract } from './api/auth/admin/invitations-list'
 import { revokeAdminInvitationContract } from './api/auth/admin/invitations-revoke'
@@ -45,14 +44,6 @@ import {
 import { getUserSettingsContract } from './api/auth/user/settings-get'
 import { updateUserSettingsContract } from './api/auth/user/settings-update'
 import { automationRunPrepareContract } from './api/automation/run-prepare'
-import { applyPromotionCodeContract } from './api/billing/apply-promotion-code'
-import { createCheckoutSessionContract } from './api/billing/create-checkout-session'
-import { createPortalSessionContract } from './api/billing/create-portal-session'
-import { downgradeToStarterContract } from './api/billing/downgrade-to-starter'
-import { finalizeUpgradeContract } from './api/billing/finalize-upgrade'
-import { resyncSeatsContract } from './api/billing/resync-seats'
-import { startUpgradeContract } from './api/billing/start-upgrade'
-import { syncCheckoutSessionContract } from './api/billing/sync-checkout-session'
 import { createCommentContract } from './api/comments/create'
 import { deleteCommentContract } from './api/comments/delete'
 import { editCommentContract } from './api/comments/edit'
@@ -371,9 +362,6 @@ export const RiptideApiContract = {
 				reactivate: reactivateAdminUserContract,
 				setMetricsAdvancedEnabled: setAdminUserMetricsAdvancedContract,
 			},
-			billing: {
-				info: billingInfoContract,
-			},
 			organizations: {
 				addDomain: addDomainContract,
 				removeDomain: removeDomainContract,
@@ -500,16 +488,6 @@ export const RiptideApiContract = {
 		delete: deleteDiffCommentContract,
 		resolve: resolveDiffCommentContract,
 		resolveBatch: resolveBatchDiffCommentsContract,
-	},
-	billing: {
-		applyPromotionCode: applyPromotionCodeContract,
-		createCheckoutSession: createCheckoutSessionContract,
-		createPortalSession: createPortalSessionContract,
-		downgradeToStarter: downgradeToStarterContract,
-		finalizeUpgrade: finalizeUpgradeContract,
-		resyncSeats: resyncSeatsContract,
-		startUpgrade: startUpgradeContract,
-		syncCheckoutSession: syncCheckoutSessionContract,
 	},
 	artifacts: {
 		list: listArtifactsContract,

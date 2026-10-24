@@ -15,7 +15,6 @@ import { listArtifactVersionsProcedure } from './api/artifacts/versions-list.eff
 import { adminArchiveAccessRequestProcedure } from './api/auth/admin/access-requests/archive'
 import { adminListAccessRequestsProcedure } from './api/auth/admin/access-requests/list'
 import { adminCountUnreadAccessRequestsEffectProcedure } from './api/auth/admin/access-requests/unread-count.effect'
-import { billingInfoProcedure } from './api/auth/admin/billing-info'
 import { createAdminInvitationProcedure } from './api/auth/admin/invitations-create'
 import { listAdminInvitationsProcedure } from './api/auth/admin/invitations-list'
 import { revokeAdminInvitationProcedure } from './api/auth/admin/invitations-revoke'
@@ -46,14 +45,6 @@ import { revokePersonalAccessTokenProcedure } from './api/auth/user/personal-acc
 import { getUserSettingsEffectProcedure } from './api/auth/user/settings-get.effect'
 import { updateUserSettingsEffectProcedure } from './api/auth/user/settings-update.effect'
 import { automationRunPrepareProcedure } from './api/automation-run-prepare.effect'
-import { applyPromotionCodeProcedure } from './api/billing/apply-promotion-code'
-import { createCheckoutSessionProcedure } from './api/billing/create-checkout-session'
-import { createPortalSessionProcedure } from './api/billing/create-portal-session'
-import { downgradeToStarterProcedure } from './api/billing/downgrade-to-starter'
-import { finalizeUpgradeProcedure } from './api/billing/finalize-upgrade'
-import { resyncSeatsProcedure } from './api/billing/resync-seats'
-import { startUpgradeProcedure } from './api/billing/start-upgrade'
-import { syncCheckoutSessionProcedure } from './api/billing/sync-checkout-session'
 import { createCommentProcedure } from './api/comments/create'
 import { deleteCommentProcedure } from './api/comments/delete.effect'
 import { editCommentProcedure } from './api/comments/edit.effect'
@@ -367,9 +358,6 @@ export const apiRouter = os.router({
 				reactivate: adminReactivateUserProcedure,
 				setMetricsAdvancedEnabled: setAdminUserMetricsAdvancedProcedure,
 			},
-			billing: {
-				info: billingInfoProcedure,
-			},
 			organizations: {
 				addDomain: addDomainProcedure,
 				removeDomain: removeDomainProcedure,
@@ -500,16 +488,6 @@ export const apiRouter = os.router({
 		delete: deleteDiffCommentProcedure,
 		resolve: resolveDiffCommentProcedure,
 		resolveBatch: resolveBatchDiffCommentsProcedure,
-	},
-	billing: {
-		applyPromotionCode: applyPromotionCodeProcedure,
-		createCheckoutSession: createCheckoutSessionProcedure,
-		createPortalSession: createPortalSessionProcedure,
-		downgradeToStarter: downgradeToStarterProcedure,
-		finalizeUpgrade: finalizeUpgradeProcedure,
-		resyncSeats: resyncSeatsProcedure,
-		startUpgrade: startUpgradeProcedure,
-		syncCheckoutSession: syncCheckoutSessionProcedure,
 	},
 	artifacts: {
 		list: listArtifactsProcedure,

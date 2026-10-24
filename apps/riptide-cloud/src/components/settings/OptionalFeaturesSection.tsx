@@ -9,13 +9,11 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { useRiptideApi } from '@/api/client'
-import { useUserInfo } from '@/hooks/useUserInfo'
 
 export function OptionalFeaturesSection() {
 	const { queryClient: apiQueryClient } = useRiptideApi()
 	const [multiplayerPromptingDialogOpen, setMultiplayerPromptingDialogOpen] = useState(false)
 	const queryClient = useQueryClient()
-	const { advancedMetricsAvailable } = useUserInfo()
 
 	const orgSettingsQuery = useQuery(
 		apiQueryClient.auth.admin.organizations.settings.get.queryOptions({
@@ -63,8 +61,6 @@ export function OptionalFeaturesSection() {
 	const commitTrackingEnabled = orgSettingsQuery.data?.commitTrackingEnabled ?? false
 	const prTrackingEnabled = orgSettingsQuery.data?.prTrackingEnabled ?? false
 	const advancedMetricsVisibleToAllMembers = orgSettingsQuery.data?.advancedMetricsVisibleToAllMembers ?? false
-	const showMetricsSwitches =
-		advancedMetricsAvailable || commitTrackingEnabled || prTrackingEnabled || advancedMetricsVisibleToAllMembers
 
 	return (
 		<section>
@@ -138,105 +134,89 @@ export function OptionalFeaturesSection() {
 						existence from outsiders.
 					</p>
 				</div>
-				{showMetricsSwitches && (
-					<>
-						<div className="grid grid-cols-[auto_12rem_1fr] gap-x-4 items-start py-2">
-							<Switch
-								checked={commitTrackingEnabled}
-								onCheckedChange={(checked) =>
-									updateOrgSettingsMutation.mutate({ commitTrackingEnabled: checked })
-								}
-								disabled={
-									orgSettingsQuery.isLoading ||
-									updateOrgSettingsMutation.isPending ||
-									(!advancedMetricsAvailable && !commitTrackingEnabled)
-								}
-								className="mt-0.5"
-							/>
-							<Label className="text-sm font-medium">Commit tracking</Label>
-							{/* The per-field lists and the propagation delay live in the tooltip, not the
+				<div className="grid grid-cols-[auto_12rem_1fr] gap-x-4 items-start py-2">
+					<Switch
+						checked={commitTrackingEnabled}
+						onCheckedChange={(checked) =>
+							updateOrgSettingsMutation.mutate({ commitTrackingEnabled: checked })
+						}
+						disabled={orgSettingsQuery.isLoading || updateOrgSettingsMutation.isPending}
+						className="mt-0.5"
+					/>
+					<Label className="text-sm font-medium">Commit tracking</Label>
+					{/* The per-field lists and the propagation delay live in the tooltip, not the
 							    row: they answer "what are you reading from my repos?", so whoever hesitates
 							    over the switch hovers, and nobody else reads them on every render. */}
-							<p className="text-sm text-muted-foreground">
-								Attribute agent commits to sessions for Advanced metrics: cost per commit and per 1,000
-								lines changed. Metadata only &mdash; no source code leaves a member's machine. Covers
-								every member unless excluded in the Users panel.{' '}
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<button
-											type="button"
-											className="cursor-help underline decoration-dotted underline-offset-2"
-										>
-											What gets sent
-										</button>
-									</TooltipTrigger>
-									<TooltipContent className="max-w-xs">
-										Commits attributed to an agent send their message and changed file paths.
-										Commits with no agent attribution send only the sha, repository, timestamp, and
-										line counts &mdash; no message, author, branch, or file paths. Turning this on
-										or off reaches a member the next time their daemon starts or runs a session, and
-										within a day either way.
-									</TooltipContent>
-								</Tooltip>
-							</p>
-						</div>
-						<div className="grid grid-cols-[auto_12rem_1fr] gap-x-4 items-start py-2">
-							<Switch
-								checked={prTrackingEnabled}
-								onCheckedChange={(checked) =>
-									updateOrgSettingsMutation.mutate({ prTrackingEnabled: checked })
-								}
-								disabled={
-									orgSettingsQuery.isLoading ||
-									updateOrgSettingsMutation.isPending ||
-									(!advancedMetricsAvailable && !prTrackingEnabled) ||
-									(!commitTrackingEnabled && !prTrackingEnabled)
-								}
-								className="mt-0.5"
-							/>
-							<Label className="text-sm font-medium">Pull request tracking</Label>
-							<p className="text-sm text-muted-foreground">
-								Adds cost per merged pull request to Advanced metrics, for branches your sessions
-								committed on. Needs commit tracking on and the HumanLayer GitHub App installed.{' '}
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<button
-											type="button"
-											className="cursor-help underline decoration-dotted underline-offset-2"
-										>
-											What gets sent
-										</button>
-									</TooltipTrigger>
-									<TooltipContent className="max-w-xs">
-										Nothing beyond commit tracking leaves a member's machine. HumanLayer reads the
-										pull request's number, title, state, author, and timestamps from GitHub and
-										matches its branch to the sessions whose commits are on it.
-									</TooltipContent>
-								</Tooltip>
-							</p>
-						</div>
-						<div className="grid grid-cols-[auto_12rem_1fr] gap-x-4 items-start py-2">
-							<Switch
-								checked={advancedMetricsVisibleToAllMembers}
-								onCheckedChange={(checked) =>
-									updateOrgSettingsMutation.mutate({ advancedMetricsVisibleToAllMembers: checked })
-								}
-								disabled={
-									orgSettingsQuery.isLoading ||
-									updateOrgSettingsMutation.isPending ||
-									(!advancedMetricsAvailable && !advancedMetricsVisibleToAllMembers)
-								}
-								className="mt-0.5"
-							/>
-							<Label className="text-sm font-medium">Advanced metrics for everyone</Label>
-							<p className="text-sm text-muted-foreground">
-								Let every member open Advanced metrics, not just admins. The page names individual
-								members alongside what they spend and what they ship, so everyone would see that about
-								everyone else. Admins keep access either way.
-							</p>
-						</div>
-					</>
-				)}
+					<p className="text-sm text-muted-foreground">
+						Attribute agent commits to sessions for Advanced metrics: cost per commit and per 1,000 lines
+						changed. Metadata only &mdash; no source code leaves a member's machine. Covers every member
+						unless excluded in the Users panel.{' '}
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									className="cursor-help underline decoration-dotted underline-offset-2"
+								>
+									What gets sent
+								</button>
+							</TooltipTrigger>
+							<TooltipContent className="max-w-xs">
+								Commits attributed to an agent send their message and changed file paths. Commits with
+								no agent attribution send only the sha, repository, timestamp, and line counts &mdash;
+								no message, author, branch, or file paths. Turning this on or off reaches a member the
+								next time their daemon starts or runs a session, and within a day either way.
+							</TooltipContent>
+						</Tooltip>
+					</p>
+				</div>
+				<div className="grid grid-cols-[auto_12rem_1fr] gap-x-4 items-start py-2">
+					<Switch
+						checked={prTrackingEnabled}
+						onCheckedChange={(checked) => updateOrgSettingsMutation.mutate({ prTrackingEnabled: checked })}
+						disabled={
+							orgSettingsQuery.isLoading ||
+							updateOrgSettingsMutation.isPending ||
+							(!commitTrackingEnabled && !prTrackingEnabled)
+						}
+						className="mt-0.5"
+					/>
+					<Label className="text-sm font-medium">Pull request tracking</Label>
+					<p className="text-sm text-muted-foreground">
+						Adds cost per merged pull request to Advanced metrics, for branches your sessions committed on.
+						Needs commit tracking on and the HumanLayer GitHub App installed.{' '}
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									className="cursor-help underline decoration-dotted underline-offset-2"
+								>
+									What gets sent
+								</button>
+							</TooltipTrigger>
+							<TooltipContent className="max-w-xs">
+								Nothing beyond commit tracking leaves a member's machine. HumanLayer reads the pull
+								request's number, title, state, author, and timestamps from GitHub and matches its
+								branch to the sessions whose commits are on it.
+							</TooltipContent>
+						</Tooltip>
+					</p>
+				</div>
+				<div className="grid grid-cols-[auto_12rem_1fr] gap-x-4 items-start py-2">
+					<Switch
+						checked={advancedMetricsVisibleToAllMembers}
+						onCheckedChange={(checked) =>
+							updateOrgSettingsMutation.mutate({ advancedMetricsVisibleToAllMembers: checked })
+						}
+						disabled={orgSettingsQuery.isLoading || updateOrgSettingsMutation.isPending}
+						className="mt-0.5"
+					/>
+					<Label className="text-sm font-medium">Advanced metrics for everyone</Label>
+					<p className="text-sm text-muted-foreground">
+						Let every member open Advanced metrics, not just admins. The page names individual members
+						alongside what they spend and what they ship, so everyone would see that about everyone else.
+						Admins keep access either way.
+					</p>
+				</div>
 			</div>
 			<MultiplayerPromptingEnableDialog
 				open={multiplayerPromptingDialogOpen}

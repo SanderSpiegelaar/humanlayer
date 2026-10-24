@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { getProjectWorkspaceStatusProcedure as liveGetStatus } from '../../src/orpc/api/project-workspaces/get-status.effect'
 import { retryProjectWorkspaceRepositorySetupProcedure as liveRetry } from '../../src/orpc/api/project-workspaces/retry-repository-setup.effect'
 import { skipProjectWorkspaceRepositorySetupStepProcedure as liveSkip } from '../../src/orpc/api/project-workspaces/skip-repository-setup-step.effect'
-import { createMockApiContext, createMockStripeService, createMockWorkosService } from '../mocks'
+import { createMockApiContext, createMockWorkosService } from '../mocks'
 import { bindProcedureToRuntime, createRuntimeWithTestPostgresLayer } from '../utils/effect-procedure-test-runtime'
 import { requireExternalTestServices } from '../utils/external-test-services'
 import { createTestDb } from '../utils/test-db'
@@ -87,12 +87,11 @@ describe('project workspace setup status and recovery', () => {
 			role: '',
 			roles: [] as string[],
 			permissions: [] as string[],
-			entitlements: [] as string[],
 			sessionId: 'session',
 		}
 		const context = createMockApiContext({
 			auth,
-			services: { db, dbReadReplica: db, workos: createMockWorkosService(), stripe: createMockStripeService() },
+			services: { db, dbReadReplica: db, workos: createMockWorkosService() },
 		})
 		return { fixture, taskId, context }
 	}

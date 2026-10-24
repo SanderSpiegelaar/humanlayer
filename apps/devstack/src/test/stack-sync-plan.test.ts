@@ -139,6 +139,17 @@ describe.skipIf(Boolean(process.env.CI))('planStackSync', () => {
 		expect(() => planStackSync(intent(), observe({ registry }), inputs)).toThrow(StackPlanningError)
 	})
 
+	it('refuses to switch a MinIO stack to an empty RustFS volume', () => {
+		const first = planStackSync(intent(), observe(), inputs)
+		const legacy = { ...first.desired, minio: { volume: 'existing-minio-data' } }
+		const registry: DevstackRegistry = { version: 1, stacks: { [first.stackId]: legacy } }
+		expect(() => planStackSync(intent(), observe({ registry, allocations: null }), inputs)).toThrow(
+			'Create a new RustFS stack and copy existing objects through S3 before switching',
+		)
+		expect(registry.stacks[first.stackId]).toBe(legacy)
+		expect(legacy.minio.volume).toBe('existing-minio-data')
+	})
+
 	it('rejects missing or duplicate allocation input', () => {
 		expect(() => planStackSync(intent(), observe({ allocations: null }), inputs)).toThrow('No available allocation')
 		const base = allocations()

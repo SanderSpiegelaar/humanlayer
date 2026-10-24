@@ -58,7 +58,7 @@ export type RivetManifest = {
 	durableStreamsOrigin: string
 }
 
-export type MinioManifest = {
+export type RustfsManifest = {
 	apiPort: number
 	consolePort: number
 	volume: string
@@ -143,7 +143,7 @@ export function redisVolumeFromManifest(redis: unknown): string | undefined {
 	return undefined
 }
 
-export function createMinioManifest(input: {
+export function createRustfsManifest(input: {
 	composeProject: string
 	apiPort: number
 	consolePort: number
@@ -151,14 +151,14 @@ export function createMinioManifest(input: {
 	bucket?: string
 	accessKeyId?: string
 	secretAccessKey?: string
-}): MinioManifest {
+}): RustfsManifest {
 	return {
 		apiPort: input.apiPort,
 		consolePort: input.consolePort,
-		volume: input.volume ?? `${input.composeProject}-minio`,
+		volume: input.volume ?? `${input.composeProject}-rustfs`,
 		bucket: input.bucket ?? 'riptide-artifacts',
-		accessKeyId: input.accessKeyId ?? 'minioadmin',
-		secretAccessKey: input.secretAccessKey ?? 'minioadmin',
+		accessKeyId: input.accessKeyId ?? 'rustfsadmin',
+		secretAccessKey: input.secretAccessKey ?? 'rustfsadmin',
 		endpoint: `http://127.0.0.1:${input.apiPort}`,
 	}
 }

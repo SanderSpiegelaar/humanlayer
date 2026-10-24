@@ -40,7 +40,7 @@ export function MemberLifecycleConfirmationDialog({
 					</AlertDialogTitle>
 					<AlertDialogDescription>
 						{deactivating
-							? `Deactivating ${email} prevents them from logging in, revokes active sessions through WorkOS, preserves their membership for later reactivation, and removes them from billing counts.`
+							? `Deactivating ${email} prevents them from logging in to this organization and preserves their membership for later reactivation.`
 							: `This will remove ${email} from your organization. They will lose access to all organization resources, and the membership must be re-created to add them back.`}
 					</AlertDialogDescription>
 				</AlertDialogHeader>

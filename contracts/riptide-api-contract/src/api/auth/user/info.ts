@@ -10,7 +10,6 @@ export const GetUserInfoOutputSchema = z.object({
 	organizationId: z.string(),
 	role: z.string(),
 	roles: z.array(z.string()),
-	advancedMetricsAvailable: z.boolean(),
 	advancedMetricsVisible: z.boolean(),
 	commitTrackingEnabled: z.boolean(),
 	prTrackingEnabled: z.boolean(),

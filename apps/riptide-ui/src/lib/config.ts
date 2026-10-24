@@ -41,8 +41,6 @@ export const buildConfig = {
 	// Channel name for display
 	channelName: CHANNEL_NAMES[buildType],
 
-	billingEnforcementEnabled: import.meta.env.VITE_PUBLIC_BILLING_ENFORCEMENT_ENABLED === 'true',
-
 	devstackId: import.meta.env.VITE_PUBLIC_DEVSTACK_ID || null,
 }
 

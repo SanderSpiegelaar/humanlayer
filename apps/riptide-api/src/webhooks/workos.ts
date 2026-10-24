@@ -4,14 +4,11 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { Hono } from 'hono'
 
 import { Sentry } from '../instrument'
-import { syncOrganizationSeatQuantity } from '../lib/seat-sync'
-import type { IStripeService } from '../lib/stripe-service'
 import type { WorkosSdkAdapter } from '../lib/workos-service'
 import { logger } from '../logger'
 
 type WorkosWebhookDeps = {
 	workosService: WorkosSdkAdapter
-	stripeService: IStripeService
 	db: PostgresJsDatabase
 	/**
 	 * Backfill `access_requests.requester_user_id` for anonymous requests matching an
@@ -85,11 +82,6 @@ export function registerWorkosWebhookRoute(app: Hono, deps: WorkosWebhookDeps): 
 				)
 			}
 
-			const result = await syncOrganizationSeatQuantity(
-				{ organizationId: organization.id, reason: 'workos_webhook' },
-				{ workosService: deps.workosService, stripeService: deps.stripeService, db: deps.db },
-			)
-
 			// Backfill requester_user_id for anonymous access requests when a user joins
 			if (membershipEvent.eventType === 'organization_membership.created') {
 				try {
@@ -115,12 +107,11 @@ export function registerWorkosWebhookRoute(app: Hono, deps: WorkosWebhookDeps): 
 					eventType: event.event,
 					workosOrganizationId: membershipEvent.workosOrganizationId,
 					organizationId: organization.id,
-					seatSync: result,
 				},
 				'Processed WorkOS membership webhook event',
 			)
 
-			return c.json({ received: true, seatSync: result })
+			return c.json({ received: true })
 		} catch (error) {
 			logger.error(
 				error,

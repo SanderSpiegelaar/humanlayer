@@ -1,10 +1,6 @@
-import { BillingKvService } from '@humanlayer/billing/billing-kv'
 import { ORPCError } from '@orpc/server'
 import * as Sentry from '@sentry/node'
-import { Effect } from 'effect'
 
-import { buildUpgradeRequiredData, canUseStarterCapacity } from '../../../../lib/free-capacity'
-import { syncOrganizationSeatQuantity } from '../../../../lib/seat-sync'
 import { logger } from '../../../../logger'
 import { apiBaseForOrganizationAdmin } from '../../../base'
 
@@ -12,7 +8,7 @@ export const adminReactivateUserProcedure = apiBaseForOrganizationAdmin.auth.adm
 	async ({ context, input, errors }) => {
 		const {
 			auth,
-			services: { db, effectRuntime, stripe, workos },
+			services: { workos },
 		} = context
 
 		let stage = 'membership_lookup'
@@ -34,52 +30,12 @@ export const adminReactivateUserProcedure = apiBaseForOrganizationAdmin.auth.adm
 				throw errors.INVALID_STATE({ data: { message: 'User membership is not inactive' } })
 			}
 
-			stage = 'capacity_check'
-			const customerId = await effectRuntime.runPromise(
-				Effect.gen(function* () {
-					const billingKv = yield* BillingKvService
-					return yield* billingKv.getOrgCustomerId({ organizationId: auth.organizationId })
-				}),
-			)
-			const cache = customerId
-				? await effectRuntime.runPromise(
-						Effect.gen(function* () {
-							const billingKv = yield* BillingKvService
-							return yield* billingKv.getSubscriptionCache({ customerId })
-						}),
-					)
-				: null
-			const isStarter = cache?.priceId === stripe.prices.starter
-
-			if (isStarter) {
-				const [activeMembers, pendingInvitations] = await Promise.all([
-					workos.countActiveOrganizationMemberships(auth.workosOrganizationId),
-					workos.countPendingInvitations({ workosOrganizationId: auth.workosOrganizationId }),
-				])
-
-				if (!canUseStarterCapacity({ activeMembers, pendingInvitations, additionalActiveMembers: 1 })) {
-					throw errors.CAPACITY_EXCEEDED({
-						data: buildUpgradeRequiredData({ activeMembers, pendingInvitations }),
-					})
-				}
-			}
-
 			stage = 'workos_reactivation'
 			await workos.userManagement.reactivateOrganizationMembership(membership.id)
-			stage = 'seat_sync_after_reactivation'
-			await syncOrganizationSeatQuantity(
-				{ organizationId: auth.organizationId, reason: 'first_party_membership_mutation' },
-				{ workosService: workos, stripeService: stripe, db },
-			)
 
 			return { success: true as const }
 		} catch (error: unknown) {
-			if (
-				error instanceof ORPCError &&
-				(error.code === 'USER_NOT_FOUND' ||
-					error.code === 'CAPACITY_EXCEEDED' ||
-					error.code === 'INVALID_STATE')
-			) {
+			if (error instanceof ORPCError && (error.code === 'USER_NOT_FOUND' || error.code === 'INVALID_STATE')) {
 				throw error
 			}
 

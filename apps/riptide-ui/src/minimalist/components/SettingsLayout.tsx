@@ -30,7 +30,6 @@ type Slug =
 	| 'projects'
 	| 'agent-sign-in'
 	| 'personal-access-tokens'
-	| 'billing'
 	| 'experiments'
 	| 'updates'
 	| 'sync'
@@ -67,7 +66,6 @@ const NAV: Array<{ label?: string; pages: Page[] }> = [
 		label: 'Account',
 		pages: [
 			{ slug: 'personal-access-tokens', label: 'Access tokens', section: 'personal-access-tokens' },
-			{ slug: 'billing', label: 'Billing', section: 'billing' },
 			{ slug: 'experiments', label: 'Experiments', section: 'experiments' },
 			{ slug: 'updates', label: 'About', section: 'updates', also: ['sync', 'diagnostics'] },
 		],

@@ -39,8 +39,7 @@ export type InstallClaim = {
 const hashState = (state: string): string => createHash('sha256').update(state).digest('hex')
 
 /**
- * Falls back to `'cloud'` for an unrecognized value rather than failing the redirect,
- * following the billing checkout-completion parse.
+ * Falls back to `'cloud'` for an unrecognized value rather than failing the redirect.
  */
 export function parseReturnClient(value: unknown): RiptideClient {
 	return RIPTIDE_CLIENTS.includes(value as RiptideClient) ? (value as RiptideClient) : 'cloud'

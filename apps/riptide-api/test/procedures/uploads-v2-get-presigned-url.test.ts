@@ -14,6 +14,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest'
 import { S3 } from '../../src/effects/services/s3/s3.service'
 import { getPresignedUrlProcedure as liveExistingTaskPresignProcedure } from '../../src/orpc/api/uploads/get-presigned-url.effect'
 import { getPresignedUrlV2Procedure as liveFutureTaskPresignProcedure } from '../../src/orpc/api/uploads/v2/get-presigned-url.effect'
+import { createMockServices } from '../mocks'
 import { bindProcedureToRuntime, createRuntimeWithTestPostgresLayer } from '../utils/effect-procedure-test-runtime'
 import { requireExternalTestServices } from '../utils/external-test-services'
 import { createTestDb } from '../utils/test-db'
@@ -86,9 +87,9 @@ describe('uploads.v2.getPresignedUrl', () => {
 			role: '',
 			roles: [],
 			permissions: [],
-			entitlements: [],
 			sessionId: `session-${userId}`,
 		},
+		services: createMockServices({ db, dbReadReplica: db, effectRuntime: runtime }),
 	})
 
 	const futureTaskPresignProcedure = () => bindProcedureToRuntime(liveFutureTaskPresignProcedure, runtime)

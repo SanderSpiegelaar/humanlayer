@@ -31,24 +31,18 @@ export function SettingsSectionNav() {
 	const navigate = useNavigate()
 	const router = useRouter()
 	const visibility = useSettingsVisibilityContext()
-	const { roles, billingPreviewEnabled, projectsV2Enabled } = visibility
+	const { roles, projectsV2Enabled } = visibility
 
 	const isActive = (section: SettingsSection) =>
 		location.pathname === SETTINGS_SECTION_PATHS[section] ||
 		location.pathname.startsWith(`${SETTINGS_SECTION_PATHS[section]}/`)
 
-	// Visible sections in display (top-to-bottom) order. The jump-number shown
-	// next to each item and the digit hotkeys both index into this list, so they
-	// stay in sync even as gated sections (Billing, Agent, Projects) appear or
-	// disappear.
 	const visibleSections = useMemo(
 		() =>
 			SETTINGS_SECTION_GROUPS.flatMap((group) =>
-				group.sections.filter((section) =>
-					isSettingsSectionVisible(section, { roles, billingPreviewEnabled, projectsV2Enabled }),
-				),
+				group.sections.filter((section) => isSettingsSectionVisible(section, { roles, projectsV2Enabled })),
 			),
-		[roles, billingPreviewEnabled, projectsV2Enabled],
+		[roles, projectsV2Enabled],
 	)
 
 	// Sections past the tenth get no number: a two-digit jump key makes no sense.

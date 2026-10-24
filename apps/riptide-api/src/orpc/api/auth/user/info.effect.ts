@@ -2,7 +2,6 @@ import { organizationSettings } from '@humanlayer/db/tables/organization-setting
 import { eq } from 'drizzle-orm'
 import { Effect } from 'effect'
 
-import { Entitlements } from '../../../../effects/services/billing/entitlements.service'
 import { isInMetricsAudience } from '../../../../effects/services/metrics/metrics-audience'
 import { mapPostgresErrorToResponse } from '../../../../effects/services/postgres/error-mapping'
 import { PostgresDb } from '../../../../effects/services/postgres/postgres-db.service'
@@ -41,8 +40,6 @@ export const getUserInfoEffectProcedure = effectOrpcBaseOrganizationRequired.aut
 			}),
 		)
 
-	const entitlements = yield* Entitlements
-	const advancedMetricsAvailable = yield* entitlements.hasFeature(organizationId, 'advancedMetrics')
 	const isAdmin = isOrganizationAdmin(context.auth)
 
 	return {
@@ -51,13 +48,10 @@ export const getUserInfoEffectProcedure = effectOrpcBaseOrganizationRequired.aut
 		organizationId: context.auth.organizationId,
 		role: context.auth.role,
 		roles: context.auth.roles,
-		advancedMetricsAvailable,
-		advancedMetricsVisible:
-			advancedMetricsAvailable &&
-			isInMetricsAudience({
-				isAdmin,
-				visibleToAllMembers: settings?.advancedMetricsVisibleToAllMembers ?? false,
-			}),
+		advancedMetricsVisible: isInMetricsAudience({
+			isAdmin,
+			visibleToAllMembers: settings?.advancedMetricsVisibleToAllMembers ?? false,
+		}),
 		commitTrackingEnabled: settings?.commitTrackingEnabled ?? false,
 		prTrackingEnabled: settings?.prTrackingEnabled ?? false,
 	}

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 
 import {
 	isSettingsSectionVisible,
+	isSettingsSection,
 	SETTINGS_SECTION_GROUPS,
 	SETTINGS_SECTION_LABELS,
 	SETTINGS_SECTION_PATHS,
@@ -23,11 +24,16 @@ describe('administration settings registration', () => {
 	})
 
 	test('is visible only to organization admins', () => {
-		const base = { billingPreviewEnabled: false, projectsV2Enabled: false }
+		const base = { projectsV2Enabled: false }
 		expect(isSettingsSectionVisible('access-requests', { ...base, roles: ['admin'] })).toBe(true)
 		expect(isSettingsSectionVisible('access-requests', { ...base, roles: ['member'] })).toBe(false)
 		expect(isSettingsSectionVisible('access-requests', { ...base, roles: undefined })).toBe(false)
 		expect(isSettingsSectionVisible('users', { ...base, roles: ['admin'] })).toBe(true)
 		expect(isSettingsSectionVisible('users', { ...base, roles: ['member'] })).toBe(false)
+	})
+
+	test('does not register a billing section', () => {
+		expect(isSettingsSection('billing')).toBe(false)
+		expect(SETTINGS_SECTION_GROUPS.flatMap((group) => group.sections)).not.toContain('billing')
 	})
 })

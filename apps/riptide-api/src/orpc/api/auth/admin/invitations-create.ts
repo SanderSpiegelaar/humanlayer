@@ -1,4 +1,3 @@
-import { BillingKvService } from '@humanlayer/billing/billing-kv'
 import { Effect, Result } from 'effect'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
@@ -7,13 +6,7 @@ import { AccessRequestService } from '../../../../effects/services/access-reques
 import type { WorkosError } from '../../../../effects/services/workos/workos.errors'
 import { WorkosService } from '../../../../effects/services/workos/workos.service'
 import { Sentry } from '../../../../instrument'
-import { buildUpgradeRequiredData, wouldExceedStarterCapacity } from '../../../../lib/free-capacity'
 import { effectOrpcBaseForOrganizationAdmin } from '../../../effect-base'
-
-function normalizePriceId(value: string | null | undefined): string | null {
-	const normalized = value?.trim()
-	return normalized ? normalized : null
-}
 
 /**
  * Read the underlying error message + code out of a classified `WorkosError`. WorkOS
@@ -39,7 +32,6 @@ export const createAdminInvitationProcedure = effectOrpcBaseForOrganizationAdmin
 		const workos = yield* WorkosService
 		const accessRequests = yield* AccessRequestService
 		const { auth } = context
-		const billingKv = yield* BillingKvService
 
 		yield* Effect.annotateCurrentSpan({
 			email: input.email,
@@ -47,49 +39,6 @@ export const createAdminInvitationProcedure = effectOrpcBaseForOrganizationAdmin
 			workos_organization_id: auth.workosOrganizationId,
 			acting_admin_user_id: auth.userId,
 		})
-
-		const customerId = yield* billingKv
-			.getOrgCustomerId({ organizationId: auth.organizationId })
-			.pipe(Effect.mapError(() => errors.INTERNAL_SERVER_ERROR()))
-		const cache = customerId
-			? yield* billingKv
-					.getSubscriptionCache({ customerId })
-					.pipe(Effect.mapError(() => errors.INTERNAL_SERVER_ERROR()))
-			: null
-		const starterPriceId = normalizePriceId(process.env.STRIPE_PRICE_STARTER)
-		const isStarter = Boolean(starterPriceId && cache?.priceId === starterPriceId)
-		if (isStarter) {
-			const capacityResult = yield* Effect.all([
-				workos.countActiveOrganizationMemberships(auth.workosOrganizationId),
-				workos.countPendingInvitations({ workosOrganizationId: auth.workosOrganizationId }),
-			]).pipe(Effect.result)
-
-			if (Result.isFailure(capacityResult)) {
-				yield* Effect.logError('Failed to evaluate Starter invitation capacity', capacityResult.failure)
-				yield* Effect.sync(() =>
-					Sentry.captureException(capacityResult.failure, {
-						tags: { error_type: 'starter_invitation_capacity_check' },
-						extra: {
-							email: input.email,
-							organizationId: auth.organizationId,
-							workosOrganizationId: auth.workosOrganizationId,
-							actingAdminUserId: auth.userId,
-						},
-					}),
-				)
-				return yield* Effect.fail(errors.INTERNAL_SERVER_ERROR())
-			}
-
-			const [activeMembers, pendingInvitations] = capacityResult.success
-
-			if (wouldExceedStarterCapacity({ activeMembers, pendingInvitations, requestedInvitations: 1 })) {
-				return yield* Effect.fail(
-					errors.UPGRADE_REQUIRED({
-						data: buildUpgradeRequiredData({ activeMembers, pendingInvitations }),
-					}),
-				)
-			}
-		}
 
 		// Best-effort helper: resolve matching access requests + cancel reminders after an
 		// invite action. Mirrors the classic handler -- resolution failures are logged and

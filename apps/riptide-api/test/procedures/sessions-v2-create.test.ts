@@ -22,7 +22,7 @@ import {
 } from '../../src/effects/services/session-title-generation/session-title-generation.service'
 import { getProjectWorkspaceRepositorySourcesProcedure as liveGetRepositorySources } from '../../src/orpc/api/project-workspaces/repository-sources-get.effect'
 import { createSessionV2Procedure as liveCreateSessionV2 } from '../../src/orpc/api/sessions/v2/create.effect'
-import { createMockApiContext, createMockStripeService, createMockWorkosService } from '../mocks'
+import { createMockApiContext, createMockWorkosService } from '../mocks'
 import { bindProcedureToRuntime, createRuntimeWithTestPostgresLayer } from '../utils/effect-procedure-test-runtime'
 import { requireExternalTestServices } from '../utils/external-test-services'
 import { createTestDb } from '../utils/test-db'
@@ -49,7 +49,6 @@ describe('sessions v2 create', () => {
 
 	const services = {
 		workos: createMockWorkosService(),
-		stripe: createMockStripeService(),
 		get db() {
 			return db
 		},
@@ -152,7 +151,6 @@ describe('sessions v2 create', () => {
 			role: '',
 			roles: [] as string[],
 			permissions: [] as string[],
-			entitlements: [] as string[],
 			sessionId: 'session',
 		}
 		return {

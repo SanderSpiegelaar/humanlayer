@@ -29,7 +29,7 @@ export function createComposeTeardownCommands(
 	const volumes = [
 		stack.postgres?.postgresVolume,
 		stack.rivet?.engineVolume,
-		stack.minio?.volume,
+		stack.rustfs?.volume,
 		stack.redis?.volume,
 		stack.testServices?.postgresVolume,
 		stack.testServices?.rivetEngineVolume,

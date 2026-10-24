@@ -50,7 +50,6 @@ describe('linear-integration', async () => {
 		role: '',
 		roles: [] as string[],
 		permissions: [] as string[],
-		entitlements: [] as string[],
 		sessionId: 'test-session',
 	})
 
@@ -61,7 +60,6 @@ describe('linear-integration', async () => {
 		role: 'admin',
 		roles: ['admin'],
 		permissions: [] as string[],
-		entitlements: [] as string[],
 		sessionId: 'test-session',
 	})
 

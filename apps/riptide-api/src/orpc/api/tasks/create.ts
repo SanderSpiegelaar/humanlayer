@@ -42,7 +42,7 @@ import { normalizeSubpath } from '../../../lib/normalize-subpath'
 import { buildS3Key } from '../../../lib/s3-key-builder'
 import { runSessionTitleGenerationAsync } from '../../../lib/session-title-generation'
 import logger from '../../../logger'
-import { apiBaseOrgRequired, requiresBillingMiddleware } from '../../base'
+import { apiBaseOrgRequired } from '../../base'
 import { slugInTaskUsedMessage } from './task-conflict-messages'
 
 /** Provider identity becomes an artifact filename; keep it path-safe and unambiguous. */
@@ -250,7 +250,6 @@ export const createTaskProcedure = apiBaseOrgRequired.tasks.create
 			},
 		}
 	})
-	.use(requiresBillingMiddleware)
 	.handler(async ({ input, context, errors }) => {
 		const {
 			id,

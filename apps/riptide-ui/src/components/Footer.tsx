@@ -15,7 +15,6 @@ import {
 } from 'lucide-react'
 import { useState, useSyncExternalStore } from 'react'
 
-import { BillingFooterIndicators } from '@/components/BillingFooterIndicators'
 import { CodingAgentSetupDialog } from '@/components/CodingAgentSetupDialog'
 import { DebugInfoModal } from '@/components/DebugInfoModal'
 import { HotkeyScopeBoundary } from '@/components/HotkeyScopeBoundary'
@@ -116,7 +115,6 @@ export function Footer() {
 					? `${buildDisplayLabel()}${desktopHost ? ` [${desktopHost}]` : ''}`
 					: `HumanLayer ${buildDisplayLabel()}`}
 				{!buildConfig.devstackId && appVersion ? ` ${appVersion}` : ''}
-				<BillingFooterIndicators />
 				{isSyncing && (
 					<SyncGridAnimation variant="snake" size="xs" speed={120} className="text-muted-foreground" />
 				)}

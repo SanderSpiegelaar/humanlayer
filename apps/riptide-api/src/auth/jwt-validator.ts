@@ -13,7 +13,6 @@ export interface AuthContext {
 	role: string
 	roles: string[]
 	permissions: string[]
-	entitlements: string[]
 	sessionId?: string
 	actingUser?: string
 }
@@ -25,7 +24,6 @@ export interface AuthContextOptionalOrg {
 	role: string
 	roles: string[]
 	permissions: string[]
-	entitlements: string[]
 	sessionId?: string
 	actingUser?: string
 }
@@ -89,7 +87,6 @@ export async function validateJWT(token: string): Promise<AuthContextOptionalOrg
 			role: claims.role ?? '',
 			roles: claims.roles ?? [],
 			permissions: claims.permissions ?? [],
-			entitlements: claims.entitlements ?? [],
 			sessionId: claims.sid,
 			actingUser: claims.act?.sub,
 		}

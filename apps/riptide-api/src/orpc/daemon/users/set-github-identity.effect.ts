@@ -4,7 +4,7 @@ import { Effect } from 'effect'
 import { mapPostgresErrorToResponse } from '../../../effects/services/postgres/error-mapping'
 import { PostgresDb } from '../../../effects/services/postgres/postgres-db.service'
 import { Sentry } from '../../../instrument'
-import { effectOrpcDaemonBase, requiresDaemonBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcDaemonBase } from '../../effect-base'
 
 /**
  * Upsert the daemon user's GitHub identity, captured once at startup from their
@@ -23,43 +23,45 @@ import { effectOrpcDaemonBase, requiresDaemonBillingEffectMiddleware } from '../
  * on (org, provider, external_id)). Same trust level as all daemon-reported PR
  * data. Phase 2's GitHub OAuth verification supersedes these rows via `source`.
  */
-export const setGithubIdentityProcedure = effectOrpcDaemonBase.users.setGithubIdentity
-	.use(requiresDaemonBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
-		const postgres = yield* PostgresDb
-		const { userId, organizationId } = context.auth
+export const setGithubIdentityProcedure = effectOrpcDaemonBase.users.setGithubIdentity.effect(function* ({
+	input,
+	context,
+	errors,
+}) {
+	const postgres = yield* PostgresDb
+	const { userId, organizationId } = context.auth
 
-		yield* postgres
-			.query(
-				postgres.client
-					.insert(userIdentities)
-					.values({
-						organization_id: organizationId,
-						user_id: userId,
-						provider: 'github',
+	yield* postgres
+		.query(
+			postgres.client
+				.insert(userIdentities)
+				.values({
+					organization_id: organizationId,
+					user_id: userId,
+					provider: 'github',
+					external_id: input.externalId,
+					external_login: input.login,
+					email: input.email,
+					source: 'daemon_gh_cli',
+				})
+				.onConflictDoUpdate({
+					target: [userIdentities.organization_id, userIdentities.provider, userIdentities.user_id],
+					set: {
 						external_id: input.externalId,
 						external_login: input.login,
 						email: input.email,
 						source: 'daemon_gh_cli',
-					})
-					.onConflictDoUpdate({
-						target: [userIdentities.organization_id, userIdentities.provider, userIdentities.user_id],
-						set: {
-							external_id: input.externalId,
-							external_login: input.login,
-							email: input.email,
-							source: 'daemon_gh_cli',
-							updated_at: BigInt(Date.now()),
-						},
-					}),
-			)
-			.pipe(
-				Effect.tapError((e) => Effect.logError(e)),
-				Effect.tapError((e) => Effect.sync(() => Sentry.captureException(e))),
-				Effect.catchTags({
-					PostgresDbQueryError: (error) => mapPostgresErrorToResponse(error, errors),
+						updated_at: BigInt(Date.now()),
+					},
 				}),
-			)
+		)
+		.pipe(
+			Effect.tapError((e) => Effect.logError(e)),
+			Effect.tapError((e) => Effect.sync(() => Sentry.captureException(e))),
+			Effect.catchTags({
+				PostgresDbQueryError: (error) => mapPostgresErrorToResponse(error, errors),
+			}),
+		)
 
-		return { ok: true }
-	})
+	return { ok: true }
+})

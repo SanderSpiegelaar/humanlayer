@@ -7,16 +7,11 @@ import z from 'zod/v4'
 import type { DaemonAuthContext } from '../auth/context'
 import type { AuthContext, AuthContextOptionalOrg } from '../auth/jwt-validator'
 import type { AppRuntime } from '../effects/app-runtime'
-import { decideBillingAccess } from '../effects/services/billing/billing-access.service'
-import { hasFeature } from '../effects/services/billing/entitlements.service'
 import { sharesMetricsWithMembers } from '../effects/services/metrics/metrics-audience'
-import { isBillingEnforcementEnabled } from '../lib/environment'
 import type { IJiraService } from '../lib/jira-service'
 import type { ILinearService } from '../lib/linear-service'
 import type { IS3Service } from '../lib/s3-service'
-import type { IStripeService } from '../lib/stripe-service'
 import type { WorkosSdkAdapter } from '../lib/workos-service'
-import { logger } from '../logger'
 
 /**
  * Injectable services available in context.
@@ -26,7 +21,6 @@ export type Services = {
 	s3: IS3Service
 	jira: IJiraService
 	linear: ILinearService
-	stripe: IStripeService
 	db: PostgresJsDatabase
 	dbReadReplica: PostgresJsDatabase
 	/**
@@ -88,50 +82,6 @@ export const requireOrganization = os.middleware(async ({ context, next, errors 
 	// TypeScript knows auth is AuthContext after type guard
 	return next({ context: { auth: context.auth, services: context.services } })
 })
-
-/**
- * Billing guard for API routes authenticated with WorkOS JWT.
- * Reads organizationId from context.auth (narrowed by requireOrganization).
- * Short-circuits when IS_BILLING_ENFORCEMENT_ENABLED is 'false'.
- * On unexpected exceptions, logs + captures to Sentry and returns SERVICE_UNAVAILABLE
- * so billing infrastructure failures never silently pass through.
- */
-export const requiresBillingMiddleware = os.middleware<{ auth: AuthContext; services: Services }, unknown>(
-	async ({ context, next, errors, path }) => {
-		const billingContext = context as { auth: AuthContext; services: Services }
-		if (!isBillingEnforcementEnabled()) return next({ context: billingContext })
-
-		const procedureName = path.join('.')
-		try {
-			const decision = await billingContext.services.effectRuntime.runPromise(
-				decideBillingAccess({ organizationId: billingContext.auth.organizationId, operation: procedureName }),
-			)
-
-			if (decision === 'fail_open') {
-				logger.warn({ procedureName }, 'Billing enforcement failed open for billing-required operation')
-				Sentry.captureMessage('Billing enforcement failed open for billing-required operation', {
-					level: 'warning',
-					tags: { error_type: 'billing_enforcement_fail_open', procedure: procedureName },
-				})
-				return next({ context: billingContext })
-			}
-
-			if (decision === 'blocked') {
-				logger.info({ procedureName }, 'Billing enforcement blocked billing-required operation')
-				throw errors.BILLING_REQUIRED()
-			}
-
-			return next({ context: billingContext })
-		} catch (error) {
-			if (error instanceof ORPCError) throw error
-			logger.error({ error, procedureName }, 'Billing middleware failed unexpectedly')
-			Sentry.captureException(error, {
-				tags: { error_type: 'billing_middleware_failure', procedure: procedureName },
-			})
-			throw errors.SERVICE_UNAVAILABLE()
-		}
-	},
-)
 
 /**
  * Api base with auth and error capture
@@ -252,44 +202,18 @@ export const apiBaseForOrganizationAdmin = os
 		}
 	})
 
-/**
- * Org base + the two Advanced Metrics gates: the plan must entitle the org, and the caller must be
- * in the page's audience — admins always, other members only where an admin has opened the page to
- * the whole org. Every metrics endpoint that exposes per-member cost/output aggregates derives from
- * THIS base instead of re-checking either gate inline — forgetting one on a new endpoint is a
- * data-exposure bug, and a middleware makes it structurally impossible rather than a convention to
- * remember.
- */
-export const apiBaseForAdvancedMetrics = apiBaseOrgRequired
-	.use(async ({ context, next, errors }) => {
-		if (!(await hasFeature(context.services.effectRuntime, context.auth.organizationId, 'advancedMetrics'))) {
-			throw errors.FORBIDDEN()
-		}
-		return next({ context })
+export const apiBaseForAdvancedMetrics = apiBaseOrgRequired.use(async ({ context, next, errors }) => {
+	const shares = await sharesMetricsWithMembers(context.services.effectRuntime, {
+		organizationId: context.auth.organizationId,
+		isAdmin: isOrganizationAdmin(context.auth),
 	})
-	.use(async ({ context, next, errors }) => {
-		const shares = await sharesMetricsWithMembers(context.services.effectRuntime, {
-			organizationId: context.auth.organizationId,
-			isAdmin: isOrganizationAdmin(context.auth),
-		})
-		if (!shares) throw errors.FORBIDDEN()
-		return next({ context })
-	})
+	if (!shares) throw errors.FORBIDDEN()
+	return next({ context })
+})
 
 export type LaunchTokenContext = {
 	launchTokenAuth: { userId: string; organizationId: string }
 	services: Services
-}
-
-const LaunchTokenContextSchema = z.object({
-	launchTokenAuth: z.object({
-		userId: z.string(),
-		organizationId: z.string(),
-	}),
-})
-
-function hasLaunchTokenContext(context: ApiContext): context is ApiContext & LaunchTokenContext {
-	return LaunchTokenContextSchema.safeParse(context).success
 }
 
 const LaunchTokenEnvelope = z.object({ launchToken: z.string() }).passthrough()
@@ -337,103 +261,6 @@ export type DaemonContext = {
 }
 
 const daemonOs = implement(RiptideDaemonApiContract).$context<DaemonContext>()
-
-/**
- * Billing guard for daemon-authenticated routes.
- * Reads organizationId from context.auth (daemon token claims).
- * Daemon tokens are long-lived, so billing is evaluated on every write request
- * to ensure billing state changes are enforced even for already-issued tokens.
- * Used after daemonBase has already narrowed auth to non-null.
- */
-export const requiresDaemonBillingMiddleware = daemonOs.middleware<
-	{ auth: DaemonAuthContext; services: Services },
-	unknown
->(async ({ context, next, errors, path }) => {
-	const daemonContext = context as { auth: DaemonAuthContext; services: Services }
-	if (!isBillingEnforcementEnabled()) {
-		return next({ context: daemonContext })
-	}
-
-	const procedureName = path.join('.')
-	try {
-		const decision = await daemonContext.services.effectRuntime.runPromise(
-			decideBillingAccess({ organizationId: daemonContext.auth.organizationId, operation: procedureName }),
-		)
-
-		if (decision === 'fail_open') {
-			logger.warn({ procedureName }, 'Billing enforcement failed open for daemon billing-required operation')
-			Sentry.captureMessage('Billing enforcement failed open for daemon billing-required operation', {
-				level: 'warning',
-				tags: { error_type: 'billing_enforcement_fail_open', procedure: procedureName },
-			})
-			return next({ context: daemonContext })
-		}
-
-		if (decision === 'blocked') {
-			logger.info({ procedureName }, 'Billing enforcement blocked daemon billing-required operation')
-			throw errors.BILLING_REQUIRED()
-		}
-
-		return next({ context: daemonContext })
-	} catch (error) {
-		if (error instanceof ORPCError) throw error
-		logger.error({ error, procedureName }, 'Daemon billing middleware failed unexpectedly')
-		Sentry.captureException(error, {
-			tags: { error_type: 'billing_middleware_failure', procedure: procedureName },
-		})
-		throw errors.SERVICE_UNAVAILABLE()
-	}
-})
-
-/**
- * Billing guard for launch-token-authenticated routes (e.g. daemon token exchange).
- * Reads organizationId from context.launchTokenAuth instead of context.auth, because
- * launch-token routes don't have a WorkOS JWT — the organization is embedded in the
- * short-lived launch token itself.
- * Used after apiBaseLaunchToken has already validated and set launchTokenAuth.
- */
-export const requiresLaunchTokenBillingMiddleware = os.middleware<LaunchTokenContext, unknown>(
-	async ({ context, next, errors, path }) => {
-		if (!hasLaunchTokenContext(context)) throw errors.UNAUTHORIZED()
-		if (!isBillingEnforcementEnabled()) return next({ context })
-
-		const procedureName = path.join('.')
-		try {
-			const decision = await context.services.effectRuntime.runPromise(
-				decideBillingAccess({
-					organizationId: context.launchTokenAuth.organizationId,
-					operation: procedureName,
-				}),
-			)
-
-			if (decision === 'fail_open') {
-				logger.warn(
-					{ procedureName },
-					'Billing enforcement failed open for launch-token billing-required operation',
-				)
-				Sentry.captureMessage('Billing enforcement failed open for launch-token billing-required operation', {
-					level: 'warning',
-					tags: { error_type: 'billing_enforcement_fail_open', procedure: procedureName },
-				})
-				return next({ context })
-			}
-
-			if (decision === 'blocked') {
-				logger.info({ procedureName }, 'Billing enforcement blocked launch-token billing-required operation')
-				throw errors.BILLING_REQUIRED()
-			}
-
-			return next({ context })
-		} catch (error) {
-			if (error instanceof ORPCError) throw error
-			logger.error({ error, procedureName }, 'Launch-token billing middleware failed unexpectedly')
-			Sentry.captureException(error, {
-				tags: { error_type: 'billing_middleware_failure', procedure: procedureName },
-			})
-			throw errors.SERVICE_UNAVAILABLE()
-		}
-	},
-)
 
 export const daemonBase = daemonOs
 	.use(async ({ context, next, errors }) => {

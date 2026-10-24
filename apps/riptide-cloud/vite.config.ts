@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => {
 		// defined fallback. They are listed so a wiring regression is VISIBLE:
 		// without VITE_PUBLIC_APP_ORIGIN every task link silently reverts to the
 		// in-app artifacts route, which is the bug this list exists to catch.
-		const optional = ['VITE_PUBLIC_BILLING_ENFORCEMENT_ENABLED', 'VITE_PUBLIC_APP_ORIGIN']
+		const optional = ['VITE_PUBLIC_APP_ORIGIN']
 		const missingOptional = optional.filter((key) => !env[key])
 		if (missingOptional.length > 0) {
 			console.warn(`Optional environment variables not set: ${missingOptional.join(', ')}`)

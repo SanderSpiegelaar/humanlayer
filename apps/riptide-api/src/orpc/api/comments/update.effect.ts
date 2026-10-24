@@ -1,11 +1,10 @@
 import { Effect } from 'effect'
 
 import { ArtifactComments } from '../../../effects/services/artifact-comments/artifact-comments'
-import { apiBaseOrgRequired, requiresBillingMiddleware } from '../../base'
+import { apiBaseOrgRequired } from '../../base'
 
-export const updateApiCommentProcedure = apiBaseOrgRequired.comments.update
-	.use(requiresBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
+export const updateApiCommentProcedure = apiBaseOrgRequired.comments.update.handler(
+	async ({ input, context, errors }) => {
 		const { userId, organizationId } = context.auth
 		return context.services.effectRuntime.runPromise(
 			Effect.gen(function* () {
@@ -50,4 +49,5 @@ export const updateApiCommentProcedure = apiBaseOrgRequired.comments.update
 				return { ...result, updated: [...result.updated], failed: [...result.failed] }
 			}),
 		)
-	})
+	},
+)

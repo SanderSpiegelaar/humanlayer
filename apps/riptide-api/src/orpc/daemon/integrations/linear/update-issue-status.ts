@@ -1,11 +1,10 @@
 import * as Sentry from '@sentry/node'
 
 import logger from '../../../../logger'
-import { daemonBase, requiresDaemonBillingMiddleware } from '../../../base'
+import { daemonBase } from '../../../base'
 
-export const updateLinearIssueStatusProcedure = daemonBase.integrations.linear.updateIssueStatus
-	.use(requiresDaemonBillingMiddleware)
-	.handler(async ({ input, context, errors }) => {
+export const updateLinearIssueStatusProcedure = daemonBase.integrations.linear.updateIssueStatus.handler(
+	async ({ input, context, errors }) => {
 		const { organizationId } = context.auth
 		const { linear } = context.services
 		try {
@@ -17,4 +16,5 @@ export const updateLinearIssueStatusProcedure = daemonBase.integrations.linear.u
 				data: { message: error instanceof Error ? error.message : 'Failed to update Linear issue status' },
 			})
 		}
-	})
+	},
+)

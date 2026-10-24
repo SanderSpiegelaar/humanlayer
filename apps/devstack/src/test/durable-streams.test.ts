@@ -27,8 +27,8 @@ function createStack(): StackRecord {
 		electric: 44008,
 		rivetEngine: 44009,
 		rivetServices: 44010,
-		minioApi: 44011,
-		minioConsole: 44012,
+		rustfsApi: 44011,
+		rustfsConsole: 44012,
 		tanstackDevtools: 44013,
 		testPostgres: 44014,
 		testElectric: 44015,
@@ -74,8 +74,12 @@ describe.skipIf(Boolean(process.env.CI))('durable streams stack isolation', () =
 		expect(compose).toContain('${DEVSTACK_DURABLE_STREAMS_PORT:-8642}:4437')
 		expect(compose).toContain('name: ${DEVSTACK_DURABLE_STREAMS_VOLUME:-electric_quickstart_durable-streams-data}')
 		expect(compose).toContain('DS_STORAGE__MODE: file-fast')
-		expect(compose).toContain('DS_LIMITS__MAX_MEMORY_BYTES: "187904819200"')
-		expect(compose).toContain('DS_LIMITS__MAX_STREAM_BYTES: "104857600"')
+		const config = Bun.YAML.parse(compose)
+		expect(config).toHaveProperty(
+			'services.durable-streams.environment.DS_LIMITS__MAX_MEMORY_BYTES',
+			'187904819200',
+		)
+		expect(config).toHaveProperty('services.durable-streams.environment.DS_LIMITS__MAX_STREAM_BYTES', '104857600')
 		expect(compose).toContain('http://localhost:4437/readyz')
 	})
 

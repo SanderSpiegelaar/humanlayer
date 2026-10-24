@@ -11,7 +11,6 @@ export default mergeConfig(
 		test: {
 			env: {
 				DATABASE_URL: process.env.DATABASE_URL ?? defaultDatabaseUrl,
-				IS_BILLING_ENFORCEMENT_ENABLED: 'false',
 				READ_REPLICA_DATABASE_URL:
 					process.env.READ_REPLICA_DATABASE_URL ?? process.env.DATABASE_URL ?? defaultDatabaseUrl,
 				// app-runtime (src/effects/app-runtime.ts) builds the live Effect S3 + WorkOS services at
@@ -37,7 +36,6 @@ export default mergeConfig(
 						include: ['src/**/*.test.ts', 'test/**/*.test.ts', 'test/effect/**/*.vi.test.ts'],
 						setupFiles: ['test/utils/setup-unit.ts'],
 						exclude: [
-							'test/learning/**',
 							'test/procedures/events-create-status-advance.test.ts',
 							'test/procedures/tasks-create-title-generation.test.ts',
 						],
@@ -62,14 +60,6 @@ export default mergeConfig(
 							'test/procedures/tasks-create-title-generation.test.ts',
 						],
 						globalSetup: ['test/utils/global-setup.ts'],
-					},
-				},
-				{
-					extends: true,
-					test: {
-						name: 'learning',
-						include: ['test/learning/**/*.test.ts'],
-						testTimeout: 120_000,
 					},
 				},
 			],

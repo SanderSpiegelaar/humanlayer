@@ -2,11 +2,10 @@ import { Effect } from 'effect'
 
 import { getWorkspaceRepositoryStatusForUserForHost } from '../../../effects/project-workspace/workspace-reads'
 import { mapPostgresErrorToResponse } from '../../../effects/services/postgres/error-mapping'
-import { effectOrpcDaemonBase, requiresDaemonBillingEffectMiddleware } from '../../effect-base'
+import { effectOrpcDaemonBase } from '../../effect-base'
 
-export const getWorkspaceRepositoryStatusProcedure = effectOrpcDaemonBase.projectWorkspaces.getRepositoryStatus
-	.use(requiresDaemonBillingEffectMiddleware)
-	.effect(function* ({ input, context, errors }) {
+export const getWorkspaceRepositoryStatusProcedure = effectOrpcDaemonBase.projectWorkspaces.getRepositoryStatus.effect(
+	function* ({ input, context, errors }) {
 		const repositoryStatus = yield* getWorkspaceRepositoryStatusForUserForHost({
 			organizationId: context.auth.organizationId,
 			projectId: input.projectId,
@@ -21,4 +20,5 @@ export const getWorkspaceRepositoryStatusProcedure = effectOrpcDaemonBase.projec
 			}),
 		)
 		return { repositoryStatus }
-	})
+	},
+)

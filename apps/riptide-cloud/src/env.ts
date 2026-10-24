@@ -32,11 +32,6 @@ export const env = {
 		| 'true'
 		| 'false'
 		| undefined,
-	VITE_PUBLIC_BILLING_ENFORCEMENT_ENABLED: import.meta.env.VITE_PUBLIC_BILLING_ENFORCEMENT_ENABLED as
-		| 'true'
-		| 'false'
-		| undefined,
-	billingEnforcementEnabled: import.meta.env.VITE_PUBLIC_BILLING_ENFORCEMENT_ENABLED === 'true',
 	VITE_PUBLIC_BLOCK_NEW_ORG_CREATION: import.meta.env.VITE_PUBLIC_BLOCK_NEW_ORG_CREATION as
 		| 'true'
 		| 'false'
